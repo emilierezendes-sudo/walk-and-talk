@@ -1,0 +1,8 @@
+# Personal data — never publish
+seed/
+supabase/allowlist.sql
+*.xlsx
+
+.claude/
+Thumbs.db
+.DS_Store
