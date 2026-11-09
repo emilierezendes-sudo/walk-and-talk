@@ -2,7 +2,10 @@
 import * as db from './db.js';
 import { S } from './db.js';
 import { esc, fmtDate, fmtDay, plural, safeUrl, STATUS } from './ui.js';
-import { ideaRow, outingCard, statusPill, wantBtn, tagChips, reactionsBar, commentsSection, photoGrid, avatar, empty } from './components.js';
+import { ideaRow, outingCard, statusPill, wantBtn, tagChips, reactionsBar, commentsSection, photoGrid, avatar, empty, ratingSection, thumb, fmtStars } from './components.js';
+import { nextMilestone, onThisDay, yearStats, yearsWithDates } from './stats.js';
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const header = (title, right = '', back = '') => `
   <header class="top">
@@ -19,6 +22,18 @@ export function home() {
   const notYet = S.ideas.filter((i) => i.status === 'not_yet').length;
   const wants = S.ideas.filter((i) => i.want && i.status !== 'done').length;
   const recent = db.sortedOutings().slice(0, 3);
+  const ms = nextMilestone(total);
+  const memories = onThisDay();
+  const year = new Date().getFullYear();
+  const memoryCard = memories.length ? `
+    <section class="block memory" aria-label="On this day">
+      <div class="block-head"><h2>${memories[0].kind === 'month' ? '📆 One month ago' : '🕰️ On this day'}</h2></div>
+      <div class="olist">${memories.slice(0, 3).map(({ o, years, kind }) => `
+        <a class="ocard memory-card" href="#/outing/${o.id}">${thumb(o)}
+          <span class="ocard-main"><span class="memory-when">${kind === 'month' ? 'A month ago today' : `${plural(years, 'year')} ago${kind === 'today' ? ' today' : ' this week'}`}</span>
+          <span class="ocard-title">${esc(db.outingTitle(o))}</span>
+          ${o.recap ? `<span class="ocard-recap">${esc(o.recap)}</span>` : ''}</span></a>`).join('')}</div>
+    </section>` : '';
   return `
     ${header('<span class="brand">Walk <i>&amp;</i> Talk</span>')}
     <section class="hero" aria-label="Total dates">
@@ -31,8 +46,13 @@ export function home() {
         <a href="#/ideas?status=not_yet"><b>${notYet}</b> not yet</a>
         <a href="#/ideas?want=1"><b>${wants}</b> 😍</a>
       </div>
+      <div class="milestone" aria-label="${ms.left} more ${ms.left === 1 ? 'date' : 'dates'} until date number ${ms.next}">
+        <div class="milestone-bar" aria-hidden="true"><span style="width:${ms.pct}%"></span></div>
+        <div class="milestone-text">🎯 ${ms.left} to go until date #${ms.next}</div>
+      </div>
     </section>
     <button class="btn btn-primary btn-block btn-big pick-btn" data-act="pick">🎲 Pick for us</button>
+    ${memoryCard}
 
     <section class="block">
       <div class="block-head"><h2>Up next</h2><a href="#/ideas?status=planned" class="small">See all</a></div>
@@ -45,7 +65,9 @@ export function home() {
       ${recent.length ? `<div class="olist">${recent.map(outingCard).join('')}</div>`
         : `<p class="muted">No dates logged yet.</p>`}
       <button class="btn btn-ghost btn-block" data-act="log-date">＋ Log a date</button>
-    </section>`;
+    </section>
+
+    <a class="review-link" href="#/year/${year}"><span aria-hidden="true">✨</span><span><b>${year} in review</b><small>Your year of dates, by the numbers</small></span><span aria-hidden="true">›</span></a>`;
 }
 
 // ───────── Ideas list ─────────
@@ -116,23 +138,93 @@ export function idea({ id }) {
     </article>`;
 }
 
-// ───────── Date log ─────────
-export function log() {
+// ───────── Date log (list or map) ─────────
+export const logState = { view: 'list', focus: null };
+export function log(params = {}) {
+  if (params.view) logState.view = params.view;
+  logState.focus = params.focus || null;
   const outs = db.sortedOutings();
   const base = db.baseline();
-  let html = '', month = '';
-  for (const o of outs) {
-    const m = fmtDate(o.happened_on, { month: 'long', year: 'numeric' });
-    if (m !== month) { if (month) html += '</div>'; html += `<h2 class="month">${m}</h2><div class="olist">`; month = m; }
-    html += outingCard(o);
+  const seg = (k, label) => `<button class="seg-btn ${logState.view === k ? 'on' : ''}" data-act="log-view" data-v="${k}" aria-pressed="${logState.view === k}">${label}</button>`;
+  let body;
+  if (logState.view === 'map') {
+    const pinned = S.outings.filter((o) => o.lat != null).length;
+    const wish = S.ideas.filter((i) => i.lat != null && i.status !== 'done').length;
+    const missing = S.outings.filter((o) => o.lat == null).length;
+    body = `
+      <div id="map-slot" class="map-slot" aria-label="Map of our dates"></div>
+      <p class="map-legend small"><span class="pin-key done" aria-hidden="true"></span> ${plural(pinned, 'date')} we went on
+        <span class="pin-key wish" aria-hidden="true"></span> ${plural(wish, 'idea')} we want to try</p>
+      ${!S.v2 ? '<p class="muted small center">The map needs the Phase 2 database update (see Settings).</p>'
+        : missing ? `<p class="muted small center">${plural(missing, 'date')} ${missing === 1 ? 'isn’t' : 'aren’t'} on the map yet. Add a place with ✎ on any date to pin it.</p>` : ''}`;
+  } else {
+    let html = '', month = '';
+    for (const o of outs) {
+      const m = fmtDate(o.happened_on, { month: 'long', year: 'numeric' });
+      if (m !== month) { if (month) html += '</div>'; html += `<h2 class="month">${m}</h2><div class="olist">`; month = m; }
+      html += outingCard(o);
+    }
+    if (month) html += '</div>';
+    body = `${outs.length ? html : empty('📖', 'No dates logged yet', 'Tap ＋ after your next date.')}
+      ${base.count ? `<p class="muted small center baseline">＋ ${plural(Number(base.count), 'more date')} counted without details${base.as_of ? ` (last on ${fmtDate(base.as_of)})` : ''}</p>` : ''}`;
   }
-  if (month) html += '</div>';
   return `
-    ${header('Date log', `<button class="icon-btn" data-act="log-date" aria-label="Log a date">＋</button>`)}
+    ${header('Date log', `<a class="icon-btn" href="#/year/${new Date().getFullYear()}" aria-label="Year in review">✨</a>`)}
     <p class="log-total"><b>${db.total()}</b> dates together${db.lastUpdated() ? ` · updated ${fmtDate(db.lastUpdated())}` : ''}</p>
-    ${outs.length ? html : empty('📖', 'No dates logged yet', 'Tap ＋ after your next date.')}
-    ${base.count ? `<p class="muted small center baseline">＋ ${plural(Number(base.count), 'more date')} counted without details${base.as_of ? ` (last on ${fmtDate(base.as_of)})` : ''}</p>` : ''}
+    <div class="seg log-seg" role="group" aria-label="View">${seg('list', '📖 List')}${seg('map', '🗺️ Map')}</div>
+    ${body}
     <button class="fab" data-act="log-date" aria-label="Log a date">＋</button>`;
+}
+
+// ───────── Year in review ─────────
+export function year({ id }) {
+  const y = Number(id) || new Date().getFullYear();
+  const st = yearStats(y);
+  const years = yearsWithDates();
+  const max = Math.max(1, ...st.months);
+  const chips = years.map((yy) => `<a class="chip chip-toggle ${yy === y ? 'on' : ''}" href="#/year/${yy}" ${yy === y ? 'aria-current="page"' : ''}>${yy}</a>`).join('');
+  if (!st.count) {
+    return `${header(`${y} in review`, '', '#/')}<div class="chips">${chips}</div>${empty('✨', `No dates logged in ${y} yet`, 'Your year in review fills in as you log dates.')}`;
+  }
+  const tile = (n, label) => `<div class="tile"><b>${n}</b><span>${label}</span></div>`;
+  const bars = st.months.map((n, i) => `
+    <div class="bar-col" tabindex="0" aria-label="${MONTHS[i]}: ${plural(n, 'date')}">
+      <span class="bar-tip" role="tooltip">${MONTHS[i]} · ${plural(n, 'date')}</span>
+      <span class="bar" style="height:${n ? Math.max(6, (n / max) * 100) : 0}%"></span>
+      <span class="bar-label" aria-hidden="true">${MONTHS[i][0]}</span>
+    </div>`).join('');
+  return `
+    ${header(`${y} in review`, '', '#/')}
+    <div class="chips year-chips">${chips}</div>
+    <section class="review-hero">
+      <div class="hero-num">${st.count}</div>
+      <div class="hero-label">${st.count === 1 ? 'date' : 'dates'} logged in ${y}</div>
+      ${st.first ? `<div class="hero-sub">From “${esc(db.outingTitle(st.first))}” (${fmtDate(st.first.happened_on, { month: 'short', day: 'numeric' })}) to “${esc(db.outingTitle(st.last))}” (${fmtDate(st.last.happened_on, { month: 'short', day: 'numeric' })})</div>` : ''}
+    </section>
+    <div class="tiles">
+      ${tile(st.photos, st.photos === 1 ? 'photo' : 'photos')}
+      ${tile(st.comments, st.comments === 1 ? 'comment' : 'comments')}
+      ${tile(st.places, st.places === 1 ? 'place' : 'places')}
+      ${tile(st.avg != null ? `${fmtStars(st.avg)}<small>★</small>` : '–', 'avg rating')}
+    </div>
+
+    <section class="card">
+      <h2>Dates by month</h2>
+      <p class="muted small">Busiest: <b>${MONTHS[st.busiest]}</b> with ${plural(st.months[st.busiest], 'date')}</p>
+      <div class="bars" role="list">${bars}</div>
+    </section>
+
+    ${st.rated.length ? `<section class="card"><h2>⭐ Top rated</h2><ol class="rank">${st.rated.map((x) => `
+      <li><a href="#/outing/${x.o.id}">${esc(db.outingTitle(x.o))}</a><span class="rank-val">${fmtStars(x.avg)} ★</span></li>`).join('')}</ol></section>`
+      : S.v2 ? '<section class="card"><h2>⭐ Top rated</h2><p class="muted small">Rate your dates (open one and tap the stars) to see your favorites here.</p></section>' : ''}
+
+    ${st.topTags.length ? `<section class="card"><h2>Favorite kinds of dates</h2><ol class="rank">${st.topTags.map((x) => `
+      <li><span>${x.tag.emoji} ${esc(x.tag.name)}</span><span class="rank-val">${plural(x.n, 'date')}</span></li>`).join('')}</ol></section>` : ''}
+
+    <div class="tiles two">
+      ${st.mostPhotos ? `<a class="tile link" href="#/outing/${st.mostPhotos.o.id}"><span>📸 Most photographed</span><b class="t-title">${esc(db.outingTitle(st.mostPhotos.o))}</b><span>${plural(st.mostPhotos.n, 'photo')}</span></a>` : ''}
+      ${st.topEmoji ? `<div class="tile"><span>Favorite reaction</span><b class="t-emoji">${st.topEmoji[0]}</b><span>used ${plural(st.topEmoji[1], 'time')}</span></div>` : ''}
+    </div>`;
 }
 
 // ───────── One logged date ─────────
@@ -146,10 +238,12 @@ export function outing({ id }) {
       <p class="eyebrow">${fmtDate(o.happened_on, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
       <h1 class="detail-title">${esc(db.outingTitle(o))}</h1>
       ${i ? `<a class="from-idea" href="#/idea/${i.id}">From our idea list ${tagChips(i.tag_ids, { short: true })} ›</a>` : ''}
-      ${o.location ? `<p class="facts-line">📍 <a href="https://maps.google.com/?q=${encodeURIComponent(o.location)}" target="_blank" rel="noopener">${esc(o.location)}</a></p>` : ''}
+      ${o.location ? `<p class="facts-line">📍 <a href="https://maps.google.com/?q=${encodeURIComponent(o.lat != null ? `${o.lat},${o.lng}` : o.location)}" target="_blank" rel="noopener">${esc(o.location)}</a>
+        ${o.lat != null ? ` · <a href="#/log?view=map&focus=${id}">see on our map</a>` : ''}</p>` : ''}
       ${photoGrid(id)}
       ${o.recap ? `<div class="recap">${esc(o.recap).replace(/\n/g, '<br>')}</div>`
         : `<button class="recap recap-empty" data-act="edit-outing" data-id="${id}">✍️ Add a recap — how did it go?</button>`}
+      ${ratingSection(id)}
       ${reactionsBar('outing', id)}
       ${commentsSection('outing', id)}
       <button class="btn btn-danger-ghost btn-block" data-act="delete-outing" data-id="${id}">Delete this date</button>
@@ -163,6 +257,8 @@ export function settings({ demo, canImport, theme }) {
   const themeBtn = (k, label) => `<button class="seg-btn ${theme === k ? 'on' : ''}" data-act="theme" data-v="${k}" aria-pressed="${theme === k}">${label}</button>`;
   return `
     ${header('Settings')}
+    ${!S.v2 && !demo ? `<section class="card notice"><h2>One-time update needed</h2>
+      <p class="small">Star ratings and the map need a small database update. In Supabase, open <b>SQL Editor → New query</b>, paste everything from <code>supabase/phase2.sql</code>, and click <b>Run</b>. Then reopen the app.</p></section>` : ''}
     <section class="card">
       <h2>Us</h2>
       <ul class="people">${S.members.map((m) => `<li>${avatar(m.id)}<span><b>${esc(m.display_name)}</b>${db.isMe(m.id) ? ' <small class="muted">(you)</small>' : ''}</span></li>`).join('')}</ul>

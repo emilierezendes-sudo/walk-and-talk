@@ -3,7 +3,9 @@ import * as db from './db.js';
 import { S } from './db.js';
 import * as V from './views.js';
 import * as F from './flows.js';
-import { esc, toast, confirmSheet } from './ui.js';
+import { esc, toast, confirmSheet, celebrate } from './ui.js';
+import { milestoneToCelebrate } from './stats.js';
+import { mountMap } from './mapview.js';
 
 const app = document.getElementById('app');
 const qs = new URLSearchParams(location.search);
@@ -149,10 +151,20 @@ function scheduleRender() {
 function render() {
   const r = route();
   let html;
+  try { html = viewHtml(r); } catch (e) {
+    console.error(e);
+    html = `<div class="empty"><div class="empty-emoji">😵‍💫</div><p><b>Something went wrong on this screen.</b></p><p class="muted small">${esc(e.message)}</p><a class="btn btn-ghost" href="#/">Go home</a></div>`;
+  }
+  paint(r, html);
+}
+
+function viewHtml(r) {
+  let html;
   switch (r.name) {
     case 'ideas': html = V.ideas(r.params); if (Object.keys(r.params).length) history.replaceState(null, '', '#/ideas'); break;
     case 'idea': html = V.idea({ id: r.id }); break;
-    case 'log': html = V.log(); break;
+    case 'log': html = V.log(r.params); if (Object.keys(r.params).length) history.replaceState(null, '', '#/log'); break;
+    case 'year': html = V.year({ id: r.id }); break;
     case 'outing': html = V.outing({ id: r.id }); break;
     case 'settings':
       if (seedAvailable === null && LOCAL) { seedAvailable = false; fetch('seed/seed.json', { method: 'HEAD' }).then((x) => { seedAvailable = x.ok; scheduleRender(); }).catch(() => {}); }
@@ -160,7 +172,11 @@ function render() {
       break;
     default: html = V.home();
   }
-  const tab = { home: 'home', ideas: 'ideas', idea: 'ideas', log: 'log', outing: 'log', settings: 'settings' }[r.name] || 'home';
+  return html;
+}
+
+function paint(r, html) {
+  const tab = { home: 'home', ideas: 'ideas', idea: 'ideas', log: 'log', outing: 'log', year: 'home', settings: 'settings' }[r.name] || 'home';
 
   // keep what's being typed and the cursor position across re-renders
   const kept = {};
@@ -184,6 +200,9 @@ function render() {
   }
   window.scrollTo(0, y);
   app.querySelectorAll('textarea').forEach(autoGrow);
+  if (r.name === 'log' && V.logState.view === 'map') mountMap();
+  const m = milestoneToCelebrate();
+  if (m) celebrate(m);
 }
 
 function autoGrow(t) { t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight + 2, 240) + 'px'; }
@@ -191,6 +210,8 @@ function autoGrow(t) { t.style.height = 'auto'; t.style.height = Math.min(t.scro
 // ───────── actions (taps on [data-act]) ─────────
 const actions = {
   'pick': () => F.pickSheet(),
+  'rate': (d) => db.setRating(d.id, Number(d.v)),
+  'log-view': (d) => { V.logState.view = d.v; render(); },
   'bump': async () => {
     await db.bumpCount(1);
     toast(`Date #${db.total()} counted! 🎉`, 'info', { label: 'Undo', onClick: () => db.bumpCount(-1) });

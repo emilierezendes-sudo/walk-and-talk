@@ -52,6 +52,27 @@ export function toast(msg, kind = 'info', action = null) {
   setTimeout(hide, kind === 'error' ? 6000 : action ? 5000 : 2600);
 }
 
+// ───────── milestone party 🎉 ─────────
+export function celebrate(n) {
+  const wrap = document.createElement('div');
+  wrap.className = 'party'; wrap.setAttribute('role', 'alertdialog'); wrap.setAttribute('aria-label', `Milestone: date number ${n}`);
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const bits = ['💞', '🎉', '✨', '💜', '🧡', '🥳', '⭐'];
+  const confetti = reduce ? '' : Array.from({ length: 46 }, (_, k) =>
+    `<span class="confetti" style="left:${Math.random() * 100}%;animation-delay:${(Math.random() * 1.2).toFixed(2)}s;animation-duration:${(2.4 + Math.random() * 1.8).toFixed(2)}s;font-size:${18 + Math.round(Math.random() * 16)}px">${bits[k % bits.length]}</span>`).join('');
+  wrap.innerHTML = `${confetti}
+    <div class="party-card">
+      <div class="party-emoji" aria-hidden="true">🥳</div>
+      <div class="party-num">Date #${n}!</div>
+      <p>${n === 365 ? 'A whole year’s worth of dates. Wow.' : n >= 100 ? 'That’s a LOT of adventures together.' : 'Look at you two go!'}</p>
+      <button class="btn btn-primary btn-block">Yay! 💞</button>
+    </div>`;
+  const close = () => { wrap.classList.add('out'); setTimeout(() => wrap.remove(), 250); };
+  wrap.addEventListener('click', close);
+  document.body.append(wrap);
+  wrap.querySelector('button').focus();
+}
+
 // ───────── bottom sheet ─────────
 // openSheet({ title, html, onMount(el, close) }) → close()
 export function openSheet({ title = '', html = '', onMount, className = '' }) {

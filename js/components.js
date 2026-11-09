@@ -86,9 +86,26 @@ export function thumb(o) {
   return `<span class="thumb thumb-emoji" aria-hidden="true">${emoji}</span>`;
 }
 
+export const fmtStars = (avg) => (Math.round(avg * 10) / 10).toString();
+
+export function ratingSection(outingId) {
+  if (!S.v2) return '';
+  const rows = S.members.map((m) => {
+    const r = S.ratings.find((x) => x.outing_id === outingId && x.created_by === m.id)?.stars || 0;
+    const mine = db.isMe(m.id);
+    const stars = [1, 2, 3, 4, 5].map((n) => mine
+      ? `<button class="star ${n <= r ? 'on' : ''}" data-act="rate" data-id="${outingId}" data-v="${n}" aria-label="${n} star${n > 1 ? 's' : ''}" aria-pressed="${n === r}">★</button>`
+      : `<span class="star ${n <= r ? 'on' : ''}" aria-hidden="true">★</span>`).join('');
+    const note = r ? '' : mine ? '<small class="muted">tap to rate</small>' : '<small class="muted">hasn’t rated yet</small>';
+    return `<li>${avatar(m.id)}<span class="grow"><b>${esc(db.isMe(m.id) ? 'You' : m.display_name)}</b> ${note}</span>
+      <span class="stars" ${mine ? 'role="group" aria-label="Your rating"' : `role="img" aria-label="${r ? `${r} of 5 stars` : 'not rated'}"`}>${stars}</span></li>`;
+  }).join('');
+  return `<section class="ratings" aria-label="Ratings"><h3 class="section-title">⭐ How was it?</h3><ul class="rate-list">${rows}</ul></section>`;
+}
+
 export function outingCard(o) {
-  const nPh = db.photosFor(o.id).length, nC = db.commentsFor('outing', o.id).length;
-  const meta = [nPh && `📷 ${nPh}`, nC && `💬 ${nC}`].filter(Boolean).join(' · ');
+  const nPh = db.photosFor(o.id).length, nC = db.commentsFor('outing', o.id).length, avg = db.avgRating(o.id);
+  const meta = [avg != null && `⭐ ${fmtStars(avg)}`, nPh && `📷 ${nPh}`, nC && `💬 ${nC}`].filter(Boolean).join(' · ');
   return `<a class="ocard" href="#/outing/${o.id}">
     ${thumb(o)}
     <span class="ocard-main">

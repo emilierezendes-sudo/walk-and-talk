@@ -5,6 +5,55 @@ import { esc, openSheet, confirmSheet, toast, REACTIONS, STATUS, fmtDate, fmtDay
 
 const go = (hash) => { location.hash = hash; };
 
+// ───────── "Where?" field with place search ─────────
+function placeField(value) {
+  return `<div class="field place-field"><label for="place-input">Where? <small class="muted">(optional)</small></label>
+    <div class="place-row"><input id="place-input" name="location" value="${esc(value || '')}" placeholder="Place or address" maxlength="200" autocomplete="off">
+    <button type="button" class="btn btn-ghost btn-sm" data-place-find>📍 Find</button></div>
+    <p class="place-status small" aria-live="polite"></p><div class="place-results" role="list"></div></div>`;
+}
+// Wires up the field. Returns a function that reads { location, lat, lng, needsLookup }.
+function mountPlace(root, start = {}) {
+  const inp = root.querySelector('[name=location]'), status = root.querySelector('.place-status'), list = root.querySelector('.place-results');
+  const st = { lat: start.lat ?? null, lng: start.lng ?? null, text: (start.location || '').trim() };
+  const showPinned = () => { status.textContent = st.lat != null && inp.value.trim() ? '📍 Pinned on your map' : ''; };
+  showPinned();
+  inp.addEventListener('input', () => { if (inp.value.trim() !== st.text) { st.lat = st.lng = null; } list.innerHTML = ''; showPinned(); });
+  const find = async () => {
+    const q = inp.value.trim(); if (!q) { inp.focus(); return; }
+    status.textContent = 'Searching…'; list.innerHTML = '';
+    try {
+      const { searchPlaces } = await import('./geo.js');
+      const res = await searchPlaces(q);
+      if (!res.length) { status.textContent = 'No matches — try adding the city.'; return; }
+      status.textContent = 'Pick the right place:';
+      list.innerHTML = res.map((r, k) => `<button type="button" class="place-hit" data-k="${k}" role="listitem"><b>${esc(r.name)}</b><small>${esc(r.label)}</small></button>`).join('');
+      list.querySelectorAll('[data-k]').forEach((b) => b.onclick = () => {
+        const r = res[Number(b.dataset.k)];
+        inp.value = r.name; st.text = r.name; st.lat = r.lat; st.lng = r.lng; list.innerHTML = ''; showPinned();
+      });
+    } catch (e) { status.textContent = e.message || 'Search failed — try again.'; }
+  };
+  root.querySelector('[data-place-find]').onclick = find;
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); find(); } });
+  return () => {
+    const location = inp.value.trim();
+    if (!location) return { location: '', lat: null, lng: null, needsLookup: false };
+    return { location, lat: st.lat, lng: st.lng, needsLookup: st.lat == null };
+  };
+}
+// Typed a place but didn't pick a search result: look it up quietly after saving.
+async function lookupLater(kind, id, location) {
+  if (!S.v2) return;
+  try {
+    const { searchPlaces } = await import('./geo.js');
+    const [hit] = await searchPlaces(location);
+    if (!hit) return;
+    if (kind === 'outing') await db.saveOuting({ lat: hit.lat, lng: hit.lng }, id);
+    else await db.saveIdea({ lat: hit.lat, lng: hit.lng }, id);
+  } catch (e) { console.warn('place lookup failed', e); }
+}
+
 // ───────── status ─────────
 export function statusMenu(ideaId) {
   const i = db.idea(ideaId);
@@ -66,8 +115,7 @@ export function logSheet({ ideaId = null, outingId = null } = {}) {
         <label class="field" data-title-field ${linkedId ? 'hidden' : ''}><span>What did you do?</span>
           <input name="title" value="${esc(o?.title || '')}" placeholder="e.g. Tacos and a long walk" maxlength="120"></label>`}
         <label class="field"><span>When?</span><input type="date" name="day" required value="${esc(o?.happened_on || db.todayStr())}"></label>
-        <label class="field"><span>Where? <small class="muted">(optional)</small></span>
-          <input name="location" value="${esc(o?.location || i?.location || '')}" placeholder="Place or address" maxlength="200"></label>
+        ${placeField(o ? o.location : i?.location)}
         <label class="field"><span>Recap <small class="muted">(how did it go?)</small></span>
           <textarea name="recap" rows="4" placeholder="The best part was…">${esc(o?.recap || '')}</textarea></label>
         <button class="btn btn-primary btn-block" type="submit">${o ? 'Save' : 'Log it'}</button>
@@ -77,6 +125,8 @@ export function logSheet({ ideaId = null, outingId = null } = {}) {
     onMount(el, close) {
       const f = el.querySelector('form');
       const sel = f.elements.idea;
+      const src = o || i;
+      const readPlace = mountPlace(f, src ? { location: src.location, lat: src.lat, lng: src.lng } : {});
       sel?.addEventListener('change', () => { f.querySelector('[data-title-field]').hidden = !!sel.value; });
       el.querySelector('[data-just-done]')?.addEventListener('click', async () => { await db.setStatus(ideaId, 'done'); close(); });
       f.onsubmit = async (e) => {
@@ -84,10 +134,12 @@ export function logSheet({ ideaId = null, outingId = null } = {}) {
         const idea_id = sel ? (sel.value || null) : linkedId;
         const title = f.elements.title?.value.trim() || '';
         if (!idea_id && !title) { toast('Give the date a name, or pick it from your list'); f.elements.title.focus(); return; }
+        const place = readPlace();
         const fields = { idea_id, title: idea_id ? '' : title, happened_on: f.elements.day.value || db.todayStr(),
-          location: f.elements.location.value.trim(), recap: f.elements.recap.value.trim() };
+          location: place.location, lat: place.lat, lng: place.lng, recap: f.elements.recap.value.trim() };
         close();
         const id = await db.saveOuting(fields, outingId);
+        if (place.needsLookup) lookupLater('outing', id, place.location);
         if (idea_id && db.idea(idea_id)?.status !== 'done') await db.setStatus(idea_id, 'done');
         if (!o) { toast(`Date #${db.total()} logged! 🎉`); go(`#/outing/${id}`); }
       };
@@ -112,7 +164,7 @@ export function ideaSheet(ideaId = null) {
         </fieldset>
         <label class="switch-row"><input type="checkbox" name="want" ${i?.want ? 'checked' : ''}><span>😍 We <b>really</b> want to do this</span></label>
         <label class="field"><span>Link <small class="muted">(website, tickets…)</small></span><input name="link" type="url" inputmode="url" value="${esc(i?.link || '')}" placeholder="https://"></label>
-        <label class="field"><span>Where? <small class="muted">(optional)</small></span><input name="location" maxlength="200" value="${esc(i?.location || '')}" placeholder="Place or address"></label>
+        ${placeField(i?.location)}
         <label class="field"><span>Whose idea?</span><select name="by"><option value="">Both of us / not sure</option>${people}</select></label>
         <button class="btn btn-primary btn-block" type="submit">${i ? 'Save' : 'Add idea'}</button>
       </form>`,
@@ -122,16 +174,19 @@ export function ideaSheet(ideaId = null) {
         b.classList.toggle('on', on); b.setAttribute('aria-pressed', on);
       });
       const f = el.querySelector('form');
+      const readPlace = mountPlace(f, i ? { location: i.location, lat: i.lat, lng: i.lng } : {});
       f.onsubmit = async (e) => {
         e.preventDefault();
         const title = f.elements.title.value.trim();
         if (!title) { toast('Give the idea a name'); f.elements.title.focus(); return; }
         let link = f.elements.link.value.trim();
         if (link && !/^https?:\/\//i.test(link)) link = 'https://' + link;
+        const place = readPlace();
         const fields = { title, description: f.elements.description.value.trim(), tag_ids: [...sel], want: f.elements.want.checked,
-          link, location: f.elements.location.value.trim(), suggested_by: f.elements.by.value || null };
+          link, location: place.location, lat: place.lat, lng: place.lng, suggested_by: f.elements.by.value || null };
         close();
         const id = await db.saveIdea(fields, ideaId);
+        if (place.needsLookup) lookupLater('idea', id, place.location);
         if (!i) { toast('Idea added 💡'); go(`#/idea/${id}`); }
       };
     },

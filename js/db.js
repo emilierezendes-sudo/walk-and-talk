@@ -4,9 +4,11 @@ import { toast } from './ui.js';
 
 export const S = {
   me: null, members: [], tags: [], ideas: [], outings: [], photos: [],
-  comments: [], reactions: [], settings: {}, loaded: false,
+  comments: [], reactions: [], ratings: [], settings: {}, loaded: false,
+  v2: false, // true once supabase/phase2.sql has been run (ratings table + map columns)
 };
 const TABLES = ['members', 'tags', 'ideas', 'outings', 'photos', 'comments', 'reactions', 'settings'];
+const OPTIONAL = ['ratings'];
 
 let B = null;
 const listeners = new Set();
@@ -16,9 +18,14 @@ export function onChange(fn) { listeners.add(fn); return () => listeners.delete(
 function emit() { listeners.forEach((f) => f()); }
 
 export async function load() {
-  const rows = await Promise.all(TABLES.map((t) => B.selectAll(t)));
+  const [rows, opt] = await Promise.all([
+    Promise.all(TABLES.map((t) => B.selectAll(t))),
+    Promise.all(OPTIONAL.map((t) => B.selectAll(t).catch(() => null))),
+  ]);
   const r = Object.fromEntries(TABLES.map((t, i) => [t, rows[i]]));
+  S.v2 = opt[0] !== null;
   Object.assign(S, r, {
+    ratings: opt[0] || [],
     tags: r.tags.sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name)),
     settings: Object.fromEntries(r.settings.map((s) => [s.id, s.value])),
     loaded: true,
@@ -68,8 +75,15 @@ export const renameMe = (name) => mutate(
   () => { const m = member(S.me.id); if (m) m.display_name = name; },
   () => B.update('members', S.me.id, { display_name: name }));
 
+// Map coordinates only exist after phase2.sql — don't send them before that
+function v2(fields) {
+  if (S.v2) return fields;
+  const { lat, lng, ...rest } = fields; return rest;
+}
+
 // ───────── ideas ─────────
 export async function saveIdea(fields, id = null) {
+  fields = v2(fields);
   if (id) {
     await mutate(() => Object.assign(idea(id), fields, { updated_at: nowIso() }), () => B.update('ideas', id, fields));
     return id;
@@ -102,6 +116,7 @@ export async function deleteIdea(id) {
 
 // ───────── outings (the date log) ─────────
 export async function saveOuting(fields, id = null) {
+  fields = v2(fields);
   if (id) {
     await mutate(() => Object.assign(outing(id), fields), () => B.update('outings', id, fields));
     return id;
@@ -117,11 +132,31 @@ export async function deleteOuting(id) {
   await mutate(() => {
     S.outings = S.outings.filter((x) => x.id !== id);
     S.photos = S.photos.filter((p) => p.outing_id !== id);
+    S.ratings = S.ratings.filter((r) => r.outing_id !== id);
   }, async () => {
     await B.removeFiles(photos.filter((p) => !p.path.startsWith('seed/')).map((p) => p.path)).catch(() => {});
     await B.removeMany('photos', photos.map((p) => p.id));
+    if (B.mode === 'demo') await B.removeMany('ratings', S.ratings.filter((r) => r.outing_id === id).map((r) => r.id));
     await B.remove('outings', id);
   });
+}
+
+// ───────── ⭐ ratings ─────────
+export const ratingsFor = (outingId) => S.ratings.filter((r) => r.outing_id === outingId);
+export const myRating = (outingId) => S.ratings.find((r) => r.outing_id === outingId && r.created_by === S.me?.id)?.stars || 0;
+export function avgRating(outingId) {
+  const rs = ratingsFor(outingId); if (!rs.length) return null;
+  return rs.reduce((s, r) => s + r.stars, 0) / rs.length;
+}
+export function setRating(outingId, stars) {
+  if (!S.v2) { toast('Ratings need the Phase 2 database update (see Settings)', 'error'); return; }
+  const mine = S.ratings.find((r) => r.outing_id === outingId && r.created_by === S.me?.id);
+  if (mine && (!stars || mine.stars === stars)) {
+    return mutate(() => { S.ratings = S.ratings.filter((r) => r !== mine); }, () => B.remove('ratings', mine.id));
+  }
+  if (mine) return mutate(() => { mine.stars = stars; }, () => B.update('ratings', mine.id, { stars }));
+  const row = { id: uid(), outing_id: outingId, stars, created_by: S.me?.id ?? null, created_at: nowIso() };
+  return mutate(() => S.ratings.push(row), () => B.insert('ratings', row));
 }
 
 // ───────── photos ─────────
