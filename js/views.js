@@ -21,8 +21,9 @@ export function home() {
   const planned = S.ideas.filter((i) => i.status === 'planned')
     .sort((a, b) => (a.planned_for || '9999').localeCompare(b.planned_for || '9999'));
   const notYet = S.ideas.filter((i) => i.status === 'not_yet').length;
-  const wants = S.ideas.filter((i) => i.want && i.status !== 'done').length;
+  const wants = db.visibleIdeas().filter((i) => i.want && i.status !== 'done').length;
   const recent = db.sortedOutings().slice(0, 3);
+  const inbox = suggestionsBanner();
   const ms = nextMilestone(total);
   const memories = onThisDay();
   const year = new Date().getFullYear();
@@ -53,6 +54,7 @@ export function home() {
       </div>
     </section>
     <button class="btn btn-primary btn-block btn-big pick-btn" data-act="pick">${icon('dice')} Pick for us</button>
+    ${inbox}
     ${memoryCard}
 
     <section class="block">
@@ -71,6 +73,11 @@ export function home() {
     <a class="review-link" href="#/year/${year}">${icon('sparkle')}<span><b>${year} in review</b><small>Your year of dates, by the numbers</small></span>${icon('next')}</a>`;
 }
 
+function suggestionsBanner() {
+  const n = S.suggestions.length;
+  return n ? `<button class="inbox-banner" data-act="suggestions">${icon('inbox')}<span><b>${plural(n, 'new suggestion')}</b><small>From friends — tap to add or decline</small></span>${icon('next')}</button>` : '';
+}
+
 // ───────── Ideas list ─────────
 export const ideasState = { q: '', status: 'all', want: false, tag: '' };
 export function ideas(params) {
@@ -82,15 +89,17 @@ export function ideas(params) {
   const q = st.q.trim().toLowerCase();
   const order = { planned: 0, not_yet: 1, done: 2 };
   const list = S.ideas
+    .filter((i) => !db.isHidden(i) || (!q && !st.want && !st.tag)) // surprises only show when no search/filter could give them away
     .filter((i) => st.status === 'all' || i.status === st.status)
     .filter((i) => !st.want || i.want)
     .filter((i) => !st.tag || i.tag_ids?.includes(st.tag))
     .filter((i) => !q || i.title.toLowerCase().includes(q) || i.description?.toLowerCase().includes(q))
-    .sort((a, b) => order[a.status] - order[b.status] || (b.want - a.want) || a.title.localeCompare(b.title));
+    .sort((a, b) => order[a.status] - order[b.status] || (db.isHidden(b) - db.isHidden(a)) || (b.want - a.want) || a.title.localeCompare(b.title));
   const counts = Object.fromEntries(['not_yet', 'planned', 'done'].map((k) => [k, S.ideas.filter((i) => i.status === k).length]));
   const seg = (k, label) => `<button class="seg-btn ${st.status === k ? 'on' : ''}" data-act="filter-status" data-v="${k}" aria-pressed="${st.status === k}">${label}</button>`;
   return `
     ${header('Ideas')}
+    ${suggestionsBanner()}
     <div class="filters">
       <input type="search" id="idea-search" class="search" placeholder="Search ${S.ideas.length} ideas…" value="${esc(st.q)}" aria-label="Search ideas" data-input="search">
       <div class="seg" role="group" aria-label="Status">${seg('all', 'All')}${seg('not_yet', `Not yet <small>${counts.not_yet}</small>`)}${seg('planned', `Planned <small>${counts.planned}</small>`)}${seg('done', `Done <small>${counts.done}</small>`)}</div>
@@ -108,10 +117,25 @@ export function ideas(params) {
 export function idea({ id }) {
   const i = db.idea(id);
   if (!i) return header('Not found', '', '#/ideas') + empty('idea', 'This idea was deleted');
+  if (db.isHidden(i)) {
+    const from = esc(db.memberName(i.created_by));
+    return `
+      ${header('', '', '#/ideas')}
+      <article class="detail surprise-page">
+        <div class="surprise-art">${icon('gift')}</div>
+        <h1 class="detail-title center">A surprise from ${from}</h1>
+        ${i.planned_for ? `<p class="center surprise-when">${icon('calendar', 'ic-sm')} ${fmtDay(i.planned_for)}</p>` : ''}
+        <p class="center muted">${from} is planning something. It’ll reveal itself after the date — or you can peek now if you’d rather know.</p>
+        <button class="btn btn-ghost btn-block" data-act="peek" data-id="${id}">${icon('eye')} Peek at the surprise</button>
+      </article>`;
+  }
   const outs = db.outingsFor(id);
+  const surpriseNote = i.is_surprise && i.status !== 'done' && db.isMe(i.created_by)
+    ? `<p class="surprise-note">${icon('gift', 'ic-sm')} Surprise for ${esc(db.partner()?.display_name || 'your partner')} — ${(i.revealed_to || []).length ? 'they peeked!' : 'they can’t see the details.'}</p>` : '';
   const link = safeUrl(i.link);
   const facts = [
-    i.status === 'planned' ? `<li>${icon('calendar')} <span>${i.planned_for ? fmtDay(i.planned_for) : 'No day picked yet'}</span> <button class="link-btn" data-act="plan" data-id="${id}">${i.planned_for ? 'Change' : 'Pick a day'}</button></li>` : '',
+    i.status === 'planned' ? `<li>${icon('calendar')} <span>${i.planned_for ? fmtDay(i.planned_for) : 'No day picked yet'}</span> <button class="link-btn" data-act="plan" data-id="${id}">${i.planned_for ? 'Change' : 'Pick a day'}</button>
+      ${i.planned_for ? `<button class="link-btn" data-act="calendar" data-id="${id}">Add to calendar</button>` : ''}</li>` : '',
     i.location ? `<li>${icon('pin')} <a href="https://maps.google.com/?q=${encodeURIComponent(i.location)}" target="_blank" rel="noopener">${esc(i.location)}</a></li>` : '',
     link ? `<li>${icon('link')} <a href="${esc(link)}" target="_blank" rel="noopener">${esc(new URL(link).hostname.replace(/^www\./, ''))}</a></li>` : '',
     i.suggested_by ? `<li>${avatar(i.suggested_by, 'sm')} <span>${db.isMe(i.suggested_by) ? 'Your' : `${esc(db.memberName(i.suggested_by))}’s`} idea</span></li>` : '',
@@ -119,6 +143,7 @@ export function idea({ id }) {
   return `
     ${header('', `<button class="icon-btn" data-act="edit-idea" data-id="${id}" aria-label="Edit idea">${icon('edit')}</button>`, '#/ideas')}
     <article class="detail">
+      ${surpriseNote}
       <div class="detail-title-row"><h1 class="detail-title">${esc(i.title)}</h1>${wantBtn(i, true)}</div>
       ${i.tag_ids?.length ? `<div class="chips">${tagChips(i.tag_ids)}</div>` : ''}
       <div class="seg status-seg" role="group" aria-label="Status">
@@ -150,7 +175,7 @@ export function log(params = {}) {
   let body;
   if (logState.view === 'map') {
     const pinned = S.outings.filter((o) => o.lat != null).length;
-    const wish = S.ideas.filter((i) => i.lat != null && i.status !== 'done').length;
+    const wish = db.visibleIdeas().filter((i) => i.lat != null && i.status !== 'done').length;
     const missing = S.outings.filter((o) => o.lat == null).length;
     body = `
       <div id="map-slot" class="map-slot" aria-label="Map of our dates"></div>
@@ -246,9 +271,38 @@ export function outing({ id }) {
         : `<button class="recap recap-empty" data-act="edit-outing" data-id="${id}">${icon('edit')} Add a recap — how did it go?</button>`}
       ${ratingSection(id)}
       ${reactionsBar('outing', id)}
+      <button class="btn btn-ghost btn-block" data-act="share-date" data-id="${id}">${icon('share')} Share this date</button>
       ${commentsSection('outing', id)}
       <button class="btn btn-danger-ghost btn-block" data-act="delete-outing" data-id="${id}">Delete this date</button>
     </article>`;
+}
+
+// ───────── Sharing (in Settings) ─────────
+function linkBlock(kind, title, about) {
+  const l = db.link(kind);
+  const url = l?.enabled ? db.linkUrl(kind) : '';
+  return `<div class="link-block">
+    <h3 class="sub-title">${title}</h3>
+    <p class="muted small">${about}</p>
+    ${url ? `
+      <div class="link-box"><input readonly value="${esc(url)}" aria-label="${title} address" data-select-all></div>
+      <div class="row-btns wrap">
+        <button class="btn btn-primary btn-sm" data-act="share-link" data-kind="${kind}">${icon('share', 'ic-sm')} Send</button>
+        <button class="btn btn-ghost btn-sm" data-act="copy-link" data-kind="${kind}">${icon('copy', 'ic-sm')} Copy</button>
+        <button class="btn btn-ghost btn-sm" data-act="link-new" data-kind="${kind}">New address</button>
+        <button class="btn btn-ghost btn-sm danger-text" data-act="link-off" data-kind="${kind}">Turn off</button>
+      </div>`
+      : `<button class="btn btn-ghost btn-block" data-act="link-on" data-kind="${kind}">${l ? 'Turn the link back on' : 'Create link'}</button>`}
+  </div>`;
+}
+function sharingCard(demo) {
+  return `<section class="card">
+    <h2>Sharing</h2>
+    ${demo ? '<p class="muted small">Links can be made here in demo mode, but they only open in the real app.</p>' : ''}
+    ${linkBlock('share', 'Share our dates', 'Anyone with this link can see your dates’ <b>photos and recaps</b> — never comments, ratings, places or surprises. Turn it off any time.')}
+    ${linkBlock('suggest', 'Suggest-a-date link', 'Friends can send you date ideas. They land in an inbox here for you to add or decline; they can’t see anything in your app.')}
+    ${S.suggestions.length ? `<button class="btn btn-ghost btn-block" data-act="suggestions">${icon('inbox', 'ic-sm')} Open inbox (${S.suggestions.length})</button>` : ''}
+  </section>`;
 }
 
 // ───────── Settings ─────────
@@ -263,6 +317,9 @@ export function settings({ demo, canImport, theme, season, currentSeason }) {
     ${header('Settings')}
     ${!S.v2 && !demo ? `<section class="card notice"><h2>One-time update needed</h2>
       <p class="small">Star ratings and the map need a small database update. In Supabase, open <b>SQL Editor → New query</b>, paste everything from <code>supabase/phase2.sql</code>, and click <b>Run</b>. Then reopen the app.</p></section>` : ''}
+    ${S.v2 && !S.v3 && !demo ? `<section class="card notice"><h2>One-time update needed</h2>
+      <p class="small">Surprises, the share link and the suggest-a-date link need a small database update. In Supabase, open <b>SQL Editor → New query</b>, paste everything from <code>supabase/phase3.sql</code>, and click <b>Run</b>. Then reopen the app.</p></section>` : ''}
+    ${S.v3 ? sharingCard(demo) : ''}
     <section class="card">
       <h2>Us</h2>
       <ul class="people">${S.members.map((m) => `<li>${avatar(m.id)}<span><b>${esc(m.display_name)}</b>${db.isMe(m.id) ? ' <small class="muted">(you)</small>' : ''}</span></li>`).join('')}</ul>

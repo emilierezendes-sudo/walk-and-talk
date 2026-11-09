@@ -104,7 +104,7 @@ export function logSheet({ ideaId = null, outingId = null } = {}) {
   const o = outingId ? db.outing(outingId) : null;
   const linkedId = o ? o.idea_id : ideaId;
   const i = linkedId ? db.idea(linkedId) : null;
-  const options = [...S.ideas].sort((a, b) => a.title.localeCompare(b.title))
+  const options = db.visibleIdeas().sort((a, b) => a.title.localeCompare(b.title))
     .map((x) => `<option value="${x.id}" ${x.id === linkedId ? 'selected' : ''}>${esc(x.title)}</option>`).join('');
   openSheet({
     title: o ? 'Edit date' : i ? 'We did it!' : 'Log a date',
@@ -173,6 +173,9 @@ export function ideaSheet(ideaId = null) {
         <label class="field"><span>Link <small class="muted">(website, tickets…)</small></span><input name="link" type="url" inputmode="url" value="${esc(i?.link || '')}" placeholder="https://"></label>
         ${placeField(i?.location)}
         <label class="field"><span>Whose idea?</span><select name="by"><option value="">Both of us / not sure</option>${people}</select></label>
+        ${S.v3 && db.partner() && (!i || db.isMe(i.created_by)) && i?.status !== 'done' ? `
+        <label class="switch-row counted-row"><input type="checkbox" name="surprise" ${i?.is_surprise ? 'checked' : ''}>
+          <span>Make it a surprise for ${esc(db.partner().display_name)}<small>They’ll only see “a surprise from you” and the day — unless they choose to peek</small></span></label>` : ''}
         <button class="btn btn-primary btn-block" type="submit">${i ? 'Save' : 'Add idea'}</button>
       </form>`,
     onMount(el, close) {
@@ -191,6 +194,10 @@ export function ideaSheet(ideaId = null) {
         const place = readPlace();
         const fields = { title, description: f.elements.description.value.trim(), tag_ids: [...sel], want: f.elements.want.checked,
           link, location: place.location, lat: place.lat, lng: place.lng, suggested_by: f.elements.by.value || null };
+        if (f.elements.surprise) {
+          fields.is_surprise = f.elements.surprise.checked;
+          if (fields.is_surprise && !i?.is_surprise) fields.revealed_to = [];
+        }
         close();
         const id = await db.saveIdea(fields, ideaId);
         if (place.needsLookup) lookupLater('idea', id, place.location);
@@ -217,7 +224,7 @@ export function pickSheet() {
       </details>
       <button class="btn btn-primary btn-block btn-big" data-roll>Pick one!</button>`,
     onMount(el, close) {
-      const pool = () => S.ideas.filter((i) => (i.status === 'not_yet' || (pickPrefs.planned && i.status === 'planned'))
+      const pool = () => db.visibleIdeas().filter((i) => (i.status === 'not_yet' || (pickPrefs.planned && i.status === 'planned'))
         && (!pickPrefs.wantOnly || i.want)
         && (!pickPrefs.tags.size || i.tag_ids?.some((t) => pickPrefs.tags.has(t))));
       const count = () => { const n = pool().length; el.querySelector('.pick-count').textContent = `· ${plural(n, 'idea')} to choose from`; return n; };
@@ -326,6 +333,149 @@ export function photoViewer(photoId) {
   document.addEventListener('keydown', key);
   document.body.classList.add('no-scroll');
   draw(); document.body.append(back);
+}
+
+// ───────── 🎁 peek at a surprise ─────────
+export async function peekFlow(ideaId) {
+  const ok = await confirmSheet('Peek at the surprise? Once you look, you’ll know what it is — and they’ll be able to see that you peeked.', { yes: 'Peek', no: 'Keep it a surprise' });
+  if (ok) { await db.peek(ideaId); toast('Surprise revealed'); }
+}
+
+// ───────── suggestions inbox ─────────
+export function suggestionsSheet() {
+  const draw = (el) => {
+    const list = S.suggestions;
+    el.querySelector('.sheet-body').innerHTML = list.length ? `<ul class="sugg-list">${list.map((s) => `
+      <li><div class="sugg-head"><b>${esc(s.title)}</b><small class="muted">from ${esc(s.from_name)} · ${fmtDate(s.created_at.slice(0, 10), { month: 'short', day: 'numeric' })}</small></div>
+        ${s.details ? `<p class="small">${esc(s.details).replace(/\n/g, '<br>')}</p>` : ''}
+        <div class="row-btns"><button class="btn btn-ghost btn-sm" data-decline="${s.id}">Decline</button>
+          <button class="btn btn-primary btn-sm" data-approve="${s.id}">${icon('plus', 'ic-sm')} Add to ideas</button></div></li>`).join('')}</ul>`
+      : '<p class="muted center">All caught up — no suggestions waiting.</p>';
+    el.querySelectorAll('[data-approve]').forEach((b) => b.onclick = async () => { b.disabled = true; await db.approveSuggestion(b.dataset.approve); toast('Added to your ideas'); draw(el); });
+    el.querySelectorAll('[data-decline]').forEach((b) => b.onclick = async () => { b.disabled = true; await db.declineSuggestion(b.dataset.decline); draw(el); });
+  };
+  openSheet({ title: 'Suggestions', html: '', onMount: (el) => draw(el) });
+}
+
+// ───────── add to calendar ─────────
+const icsEsc = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1');
+const ymd = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+export function calendarSheet(ideaId) {
+  const i = db.idea(ideaId);
+  const start = new Date(`${i.planned_for}T12:00:00`); const end = new Date(start); end.setDate(end.getDate() + 1);
+  const title = i.title || 'Date';
+  const details = [i.description, i.link].filter(Boolean).join('\n\n');
+  const google = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${ymd(start)}/${ymd(end)}`
+    + `${details ? `&details=${encodeURIComponent(details)}` : ''}${i.location ? `&location=${encodeURIComponent(i.location)}` : ''}`;
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Walk & Talk//EN', 'CALSCALE:GREGORIAN', 'BEGIN:VEVENT',
+    `UID:${i.id}@walk-and-talk`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '')}`,
+    `DTSTART;VALUE=DATE:${ymd(start)}`, `DTEND;VALUE=DATE:${ymd(end)}`, `SUMMARY:${icsEsc(title)}`,
+    i.location ? `LOCATION:${icsEsc(i.location)}` : '', details ? `DESCRIPTION:${icsEsc(details)}` : '',
+    'END:VEVENT', 'END:VCALENDAR'].filter(Boolean).join('\r\n');
+  openSheet({
+    title: 'Add to calendar',
+    html: `<p class="muted">${esc(title)} · ${fmtDay(i.planned_for)}</p>
+      <button class="btn btn-primary btn-block" data-ics>${icon('calendar', 'ic-sm')} iPhone / Outlook calendar</button>
+      <a class="btn btn-ghost btn-block" href="${esc(google)}" target="_blank" rel="noopener">${icon('calendar', 'ic-sm')} Google Calendar</a>
+      <p class="muted small center">It’s added as an all-day event.</p>`,
+    onMount(el, close) {
+      el.querySelector('[data-ics]').onclick = () => {
+        const iOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        if (iOS) { location.href = `data:text/calendar;charset=utf-8,${encodeURIComponent(ics)}`; }
+        else {
+          const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([ics], { type: 'text/calendar' })), download: 'walk-and-talk-date.ics' });
+          document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        }
+        close();
+      };
+    },
+  });
+}
+
+// ───────── share links ─────────
+export async function shareLink(kind) {
+  const url = db.linkUrl(kind);
+  const text = kind === 'share' ? 'Here are our dates!' : 'Got a date idea for us? Drop it here:';
+  if (navigator.share) { try { await navigator.share({ title: 'Walk & Talk', text, url }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+  await copyText(url); toast('Link copied');
+}
+export async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch {
+    const t = Object.assign(document.createElement('textarea'), { value: text }); document.body.append(t); t.select();
+    try { document.execCommand('copy'); } catch {} t.remove(); return true;
+  }
+}
+
+// ───────── share one date as a picture card ─────────
+export async function shareDate(outingId) {
+  const o = db.outing(outingId); if (!o) return;
+  toast('Making your card…');
+  const title = db.outingTitle(o);
+  const when = fmtDate(o.happened_on, { month: 'long', day: 'numeric', year: 'numeric' });
+  let file = null;
+  try { file = await dateCard(o, title, when); } catch (e) { console.warn('card failed', e); }
+  const text = `${title} — ${when}${o.recap ? `\n\n${o.recap}` : ''}`;
+  try {
+    if (file && navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title, text }); return; }
+    if (navigator.share) { await navigator.share({ title, text }); return; }
+  } catch (e) { if (e.name === 'AbortError') return; }
+  if (file) {
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(file), download: file.name });
+    document.body.append(a); a.click(); a.remove();
+  }
+  await copyText(text); toast(file ? 'Card downloaded and text copied' : 'Copied to share');
+}
+
+async function dateCard(o, title, when) {
+  const W = 1080, H = 1350, pad = 72;
+  const css = getComputedStyle(document.documentElement);
+  const v = (n) => css.getPropertyValue(n).trim();
+  const col = { bg: v('--surface'), text: v('--text'), muted: v('--muted'), primary: v('--primary'), onPrimary: v('--on-primary'), accentText: v('--accent-text'), star: v('--star') };
+  await Promise.all(['600 72px Fraunces', '700 34px Nunito', '400 34px Nunito'].map((f) => document.fonts?.load(f).catch(() => {})));
+  const c = Object.assign(document.createElement('canvas'), { width: W, height: H });
+  const g = c.getContext('2d');
+  const photo = db.photosFor(o.id)[0];
+  let img = null;
+  if (photo) {
+    try { const url = db.photoUrl(photo.path); if (url) img = await createImageBitmap(await (await fetch(url)).blob()); } catch {}
+  }
+  const photoH = img ? 800 : 0;
+  g.fillStyle = img ? col.bg : col.primary; g.fillRect(0, 0, W, H);
+  if (img) {
+    const s = Math.max(W / img.width, photoH / img.height), w = img.width * s, h = img.height * s;
+    g.save(); g.beginPath(); g.rect(0, 0, W, photoH); g.clip(); g.drawImage(img, (W - w) / 2, (photoH - h) / 2, w, h); g.restore();
+  }
+  const ink = img ? col.text : col.onPrimary, soft = img ? col.accentText : col.onPrimary;
+  const wrap = (text, font, maxW, maxLines) => {
+    g.font = font; const words = String(text).split(/\s+/); const lines = []; let line = '';
+    for (const w of words) {
+      const t = line ? `${line} ${w}` : w;
+      if (g.measureText(t).width > maxW && line) { lines.push(line); line = w; if (lines.length === maxLines) break; } else line = t;
+    }
+    if (lines.length < maxLines && line) lines.push(line);
+    if (lines.length === maxLines && words.join(' ').length > lines.join(' ').length) lines[maxLines - 1] = lines[maxLines - 1].replace(/\s*\S*$/, '') + '…';
+    return lines;
+  };
+  let y = img ? photoH + 90 : 300;
+  g.fillStyle = soft; g.font = '700 34px Nunito, sans-serif'; g.fillText(when.toUpperCase(), pad, y);
+  y += 30;
+  const titleLines = wrap(title, `600 ${img ? 72 : 96}px Fraunces, Georgia, serif`, W - pad * 2, img ? 2 : 4);
+  g.fillStyle = ink;
+  for (const l of titleLines) { y += img ? 84 : 112; g.fillText(l, pad, y); }
+  const avg = db.avgRating(o.id);
+  if (avg != null) { y += 64; g.font = '400 44px sans-serif'; g.fillStyle = col.star; g.fillText('★'.repeat(Math.round(avg)), pad, y); }
+  if (o.recap && !img) {
+    y += 40;
+    g.fillStyle = ink; for (const l of wrap(o.recap.replace(/\s+/g, ' '), '400 40px Nunito, sans-serif', W - pad * 2, 5)) { y += 56; g.fillText(l, pad, y); }
+  } else if (o.recap) {
+    y += 20;
+    g.fillStyle = img ? col.muted : ink; for (const l of wrap(o.recap.replace(/\s+/g, ' '), '400 34px Nunito, sans-serif', W - pad * 2, 2)) { y += 48; g.fillText(l, pad, y); }
+  }
+  g.font = '700 30px Nunito, sans-serif'; g.fillStyle = img ? col.muted : ink; g.globalAlpha = img ? 1 : 0.85;
+  g.fillText('Walk & Talk', pad, H - 60); g.globalAlpha = 1;
+  const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.9));
+  return new File([blob], 'walk-and-talk-date.jpg', { type: 'image/jpeg' });
 }
 
 export { fmtDate, fmtDay };

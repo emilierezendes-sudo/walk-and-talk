@@ -45,6 +45,8 @@ export function createSupabaseBackend({ url, key }) {
     async insert(table, rows) { return ok(await sb.from(table).insert(rows).select()); },
     async update(table, id, patch) { return ok(await sb.from(table).update(patch).eq('id', id).select())[0]; },
     async upsert(table, row) { return ok(await sb.from(table).upsert(row).select())[0]; },
+    async upsertBy(table, row, onConflict) { return ok(await sb.from(table).upsert(row, { onConflict }).select())[0]; },
+    async rpc(fn, args) { return ok(await sb.rpc(fn, args)); },
     async remove(table, id) { ok(await sb.from(table).delete().eq('id', id)); },
     async removeMany(table, ids) { if (ids.length) ok(await sb.from(table).delete().in('id', ids)); },
 

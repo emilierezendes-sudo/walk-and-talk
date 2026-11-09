@@ -120,7 +120,17 @@ export function outingCard(o) {
 }
 
 export function ideaRow(i) {
+  if (db.isHidden(i)) {
+    return `<li class="irow irow-surprise">
+      <span class="surprise-badge">${icon('gift')}</span>
+      <a class="irow-main" href="#/idea/${i.id}"><span class="irow-title">A surprise from ${esc(db.memberName(i.created_by))}</span>
+        <span class="irow-sub">${i.planned_for ? `<span class="when">${icon('calendar', 'ic-sm')} ${fmtDay(i.planned_for)}</span>` : '<span class="tag-words">Details hidden until you peek</span>'}</span></a>
+      <span class="pill st-${i.status}" aria-label="Status: ${STATUS[i.status].label}"><span class="pill-dot" aria-hidden="true"></span>${STATUS[i.status].label}</span>
+    </li>`;
+  }
+  const mine = i.is_surprise && i.status !== 'done' && db.isMe(i.created_by);
   const sub = [
+    mine ? `<span class="surprise-tag">${icon('gift', 'ic-sm')} Surprise</span>` : '',
     tagChips(i.tag_ids, { short: true }),
     i.status === 'planned' && i.planned_for ? `<span class="when">${icon('calendar', 'ic-sm')} ${fmtDay(i.planned_for)}</span>` : '',
     i.status === 'done' && db.outingsFor(i.id).length > 1 ? `<span class="when">${db.outingsFor(i.id).length}×</span>` : '',

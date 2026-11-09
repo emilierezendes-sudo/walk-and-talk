@@ -4,11 +4,12 @@ import { toast } from './ui.js';
 
 export const S = {
   me: null, members: [], tags: [], ideas: [], outings: [], photos: [],
-  comments: [], reactions: [], ratings: [], settings: {}, loaded: false,
+  comments: [], reactions: [], ratings: [], links: [], suggestions: [], settings: {}, loaded: false,
   v2: false, // true once supabase/phase2.sql has been run (ratings table + map columns)
+  v3: false, // true once supabase/phase3.sql has been run (surprises, links, suggestions)
 };
 const TABLES = ['members', 'tags', 'ideas', 'outings', 'photos', 'comments', 'reactions', 'settings'];
-const OPTIONAL = ['ratings'];
+const OPTIONAL = ['ratings', 'links', 'suggestions'];
 
 let B = null;
 const listeners = new Set();
@@ -24,8 +25,11 @@ export async function load() {
   ]);
   const r = Object.fromEntries(TABLES.map((t, i) => [t, rows[i]]));
   S.v2 = opt[0] !== null;
+  S.v3 = opt[1] !== null && opt[2] !== null;
   Object.assign(S, r, {
     ratings: opt[0] || [],
+    links: opt[1] || [],
+    suggestions: (opt[2] || []).sort((a, b) => a.created_at.localeCompare(b.created_at)),
     tags: r.tags.sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name)),
     settings: Object.fromEntries(r.settings.map((s) => [s.id, s.value])),
     loaded: true,
@@ -77,9 +81,50 @@ export const renameMe = (name) => mutate(
 
 // Map coordinates only exist after phase2.sql — don't send them before that
 function v2(fields) {
-  if (S.v2) return fields;
-  const { lat, lng, ...rest } = fields; return rest;
+  let out = fields;
+  if (!S.v2) { const { lat, lng, ...rest } = out; out = rest; }
+  if (!S.v3) { const { is_surprise, revealed_to, ...rest } = out; out = rest; }
+  return out;
 }
+
+// ───────── 🎁 surprises ─────────
+// Hidden from me if my partner made it a surprise, it isn't done, and I haven't peeked.
+export const isHidden = (i) => !!(i && i.is_surprise && S.me && i.created_by !== S.me.id
+  && i.status !== 'done' && !(i.revealed_to || []).includes(S.me.id));
+export const partner = () => S.members.find((m) => m.id !== S.me?.id) || null;
+export function peek(id) {
+  const i = idea(id);
+  return saveIdea({ revealed_to: [...new Set([...(i.revealed_to || []), S.me.id])] }, id);
+}
+export const visibleIdeas = () => S.ideas.filter((i) => !isHidden(i));
+
+// ───────── share + suggest links ─────────
+export const link = (kind) => S.links.find((l) => l.id === kind || l.kind === kind) || null;
+function newToken() {
+  const b = crypto.getRandomValues(new Uint8Array(18));
+  return btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+// on: true → make sure a link exists and is on; 'new' → brand-new address (old one stops working); false → off
+export async function setLink(kind, on) {
+  const cur = link(kind);
+  const row = { kind, token: on === 'new' || !cur ? newToken() : cur.token, enabled: on !== false, updated_at: nowIso() };
+  await mutate(() => { S.links = [...S.links.filter((l) => l.kind !== kind), { ...row, id: kind }]; },
+    () => B.mode === 'demo' ? B.upsert('links', { ...row, id: kind }) : B.upsertBy('links', row, 'kind'));
+}
+export function linkUrl(kind) {
+  const l = link(kind); if (!l) return '';
+  const base = location.origin + location.pathname.replace(/[^/]*$/, '');
+  return `${base}${kind === 'share' ? 'share.html' : 'suggest.html'}#${l.token}`;
+}
+export async function approveSuggestion(id) {
+  const s = S.suggestions.find((x) => x.id === id); if (!s) return null;
+  const description = [s.details, `Suggested by ${s.from_name}`].filter(Boolean).join('\n\n');
+  const ideaId = await saveIdea({ title: s.title, description, suggested_by: null });
+  await mutate(() => { S.suggestions = S.suggestions.filter((x) => x.id !== id); }, () => B.remove('suggestions', id));
+  return ideaId;
+}
+export const declineSuggestion = (id) => mutate(
+  () => { S.suggestions = S.suggestions.filter((x) => x.id !== id); }, () => B.remove('suggestions', id));
 
 // ───────── ideas ─────────
 export async function saveIdea(fields, id = null) {

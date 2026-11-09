@@ -508,6 +508,54 @@ button.star:active { transform: scale(1.2); }
 .react.add { display: inline-flex; align-items: center; gap: 4px; }
 .react.add .ic { width: 18px; height: 18px; }
 
+/* Phase 3: surprises, suggestions inbox, sharing */
+.surprise-badge { flex: none; width: 44px; height: 44px; display: grid; place-items: center; color: var(--accent-text); }
+.irow-surprise { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
+.irow-surprise .pill { cursor: default; }
+.surprise-tag { display: inline-flex; align-items: center; gap: 3px; font-size: .78rem; font-weight: 800; color: var(--accent-text); }
+.surprise-page { text-align: center; padding-top: 24px; }
+.surprise-art { width: 96px; height: 96px; margin: 0 auto 16px; border-radius: 28px; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface)); color: var(--accent-text); }
+.surprise-art .ic { width: 48px; height: 48px; stroke-width: 1.6; }
+.surprise-when { font-weight: 800; color: var(--accent-text); }
+.surprise-note { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 12px; font-size: .875rem; font-weight: 700;
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface)); color: var(--accent-text); margin: 0 0 10px; }
+.inbox-banner {
+  display: flex; align-items: center; gap: 12px; width: 100%; margin: 12px 0 4px; padding: 12px 14px; border-radius: var(--radius); cursor: pointer; text-align: left;
+  border: 1.5px solid var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); color: var(--text);
+}
+.inbox-banner > span { flex: 1; display: grid; }
+.inbox-banner small { color: var(--muted); }
+.inbox-banner .ic:first-child { color: var(--accent-text); }
+.sugg-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.sugg-list li { background: var(--surface); border-radius: 14px; padding: 12px 14px; box-shadow: var(--shadow); }
+.sugg-head { display: grid; gap: 2px; }
+.sugg-list .row-btns { margin-top: 10px; }
+.link-block + .link-block { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.link-box input { width: 100%; min-height: 42px; padding: 8px 12px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--bg); font-size: .85rem; }
+.row-btns.wrap { flex-wrap: wrap; margin-top: 8px; }
+.row-btns.wrap .btn { flex: 1 1 auto; }
+.danger-text { color: var(--danger); }
+
+/* public pages (share.html, suggest.html) */
+.public-page { max-width: 640px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 20px) 16px 48px; }
+.public-msg { padding-top: 20vh; }
+.pub-head { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+.pub-head h1 { font-size: 1.7rem; }
+.pub-head p { margin: 2px 0 0; }
+.pub-logo { border-radius: 12px; flex: none; }
+.pub-list { display: grid; gap: 14px; }
+.pub-card { background: var(--surface); border-radius: 20px; overflow: hidden; box-shadow: var(--shadow); }
+.pub-photos { display: grid; gap: 2px; grid-template-columns: repeat(3, 1fr); }
+.pub-photos.n1 { grid-template-columns: 1fr; } .pub-photos.n2 { grid-template-columns: 1fr 1fr; }
+.pub-photos a { display: block; aspect-ratio: 1; overflow: hidden; background: var(--surface-2); }
+.pub-photos.n1 a { aspect-ratio: 4 / 3; }
+.pub-photos img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pub-body { padding: 14px 16px 16px; }
+.pub-title { font-size: 1.3rem; margin: 2px 0 6px; }
+.pub-recap { margin: 0; }
+.thanks { padding: 28px 20px; }
+
 /* season picker in Settings */
 .season-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
 .season-opt {

@@ -42,7 +42,7 @@ export async function mountMap() {
     if (logState.focus === o.id) focus = m;
   }
   for (const i of S.ideas) {
-    if (i.lat == null || i.status === 'done') continue;
+    if (i.lat == null || i.status === 'done' || db.isHidden(i)) continue;
     const m = L.marker([i.lat, i.lng], { icon: pinIcon(L, 'wish'), title: i.title, riseOnHover: true })
       .bindPopup(`<b>${esc(i.title)}</b><br><span>Idea · ${STATUS[i.status].label}</span><br><a href="#/idea/${i.id}">Open idea ›</a>`);
     layer.addLayer(m); pts.push([i.lat, i.lng]);

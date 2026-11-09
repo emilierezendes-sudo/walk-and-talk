@@ -225,6 +225,19 @@ function autoGrow(t) { t.style.height = 'auto'; t.style.height = Math.min(t.scro
 const actions = {
   'pick': () => F.pickSheet(),
   'rate': (d) => db.setRating(d.id, Number(d.v)),
+  'peek': (d) => F.peekFlow(d.id),
+  'suggestions': () => F.suggestionsSheet(),
+  'calendar': (d) => F.calendarSheet(d.id),
+  'share-date': (d) => F.shareDate(d.id),
+  'share-link': (d) => F.shareLink(d.kind),
+  'copy-link': async (d) => { await F.copyText(db.linkUrl(d.kind)); toast('Link copied'); },
+  'link-on': (d) => db.setLink(d.kind, true),
+  'link-new': async (d) => {
+    if (await confirmSheet('Make a new address? The old link will stop working for anyone who has it.', { yes: 'Make new link' })) { await db.setLink(d.kind, 'new'); toast('New link ready'); }
+  },
+  'link-off': async (d) => {
+    if (await confirmSheet(d.kind === 'share' ? 'Turn off the share link? Anyone who has it won’t be able to see your dates.' : 'Turn off the suggestion link? Friends won’t be able to send ideas.', { yes: 'Turn off', danger: true })) await db.setLink(d.kind, false);
+  },
   'log-view': (d) => { V.logState.view = d.v; render(); },
   'bump': async () => {
     await db.bumpCount(1);
@@ -301,6 +314,8 @@ document.addEventListener('click', (e) => {
   e.preventDefault();
   Promise.resolve(fn(el.dataset, el)).catch((err) => { console.error(err); toast(err.message || 'Something went wrong', 'error'); });
 });
+
+document.addEventListener('focusin', (e) => { if (e.target.matches?.('[data-select-all]')) e.target.select(); });
 
 document.addEventListener('input', (e) => {
   if (e.target.matches?.('textarea')) autoGrow(e.target);

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Suggest a date · Walk &amp; Talk</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <script>
+    (function () {
+      var r = document.documentElement, m = ['winter','winter','spring','spring','spring','summer','summer','summer','fall','fall','fall','winter'];
+      r.dataset.mode = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      r.dataset.season = m[new Date().getMonth()];
+    })();
+  </script>
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Nunito:wght@400;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body data-page="suggest" class="public">
+  <main id="page" class="public-page"><div class="empty"><p class="muted">Loading…</p></div></main>
+  <noscript>This page needs JavaScript turned on.</noscript>
+  <script type="module" src="js/public.js"></script>
+</body>
+</html>
