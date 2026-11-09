@@ -6,6 +6,7 @@ import * as F from './flows.js';
 import { esc, toast, confirmSheet, celebrate } from './ui.js';
 import { milestoneToCelebrate } from './stats.js';
 import { mountMap } from './mapview.js';
+import { icon } from './icons.js';
 
 const app = document.getElementById('app');
 const qs = new URLSearchParams(location.search);
@@ -13,13 +14,26 @@ const DEMO = qs.has('demo') || !CONFIG.supabaseUrl || !CONFIG.supabaseAnonKey;
 const LOCAL = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const AUTH_HASH = location.hash; // read before Supabase consumes tokens from email links
 
-// ───────── theme ─────────
-const getTheme = () => { try { return localStorage.getItem('wt-theme') || 'auto'; } catch { return 'auto'; } };
-function applyTheme(t = getTheme()) {
-  document.documentElement.dataset.theme = t;
-  try { localStorage.setItem('wt-theme', t); } catch {}
+// ───────── colors: season + light/dark (saved per phone) ─────────
+const SEASON_BY_MONTH = ['winter', 'winter', 'spring', 'spring', 'spring', 'summer', 'summer', 'summer', 'fall', 'fall', 'fall', 'winter'];
+const seasonNow = () => SEASON_BY_MONTH[new Date().getMonth()];
+const getPref = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
+const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const getTheme = () => getPref('wt-theme', 'auto');      // auto · light · dark
+const getSeason = () => getPref('wt-season', 'auto');    // auto · fall · winter · spring · summer
+const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+function applyTheme() {
+  const root = document.documentElement;
+  const mode = getTheme(), season = getSeason();
+  root.dataset.theme = mode;
+  root.dataset.mode = mode === 'dark' || (mode === 'auto' && darkQuery.matches) ? 'dark' : 'light';
+  root.dataset.season = season === 'auto' ? seasonNow() : season;
+  const bg = getComputedStyle(root).getPropertyValue('--bg').trim();
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.remove());
+  if (bg) document.head.append(Object.assign(document.createElement('meta'), { name: 'theme-color', content: bg }));
 }
 applyTheme();
+darkQuery.addEventListener?.('change', applyTheme);
 
 // ───────── backend ─────────
 const backend = DEMO
@@ -43,22 +57,22 @@ function renderAuth(step = 'signin', email = '', error = '', note = '') {
         ${emailField}${pwField('Choose a password', 'new-password')}
         <button class="btn btn-primary btn-block">Create account</button>
         <div class="auth-links"><button type="button" class="link-btn" data-go="signin">Already have an account? Sign in</button></div></form>`,
-    sent: `<div class="form"><p>📬 Almost there! We emailed a confirmation link to <b>${esc(email)}</b>.</p>
+    sent: `<div class="form"><p>Almost there! We emailed a confirmation link to <b>${esc(email)}</b>.</p>
         <p class="muted small">Tap the link in that email (check spam if you don’t see it), then come back here and sign in.</p>
         <button class="btn btn-primary btn-block" data-go="signin">Go to sign in</button></div>`,
     forgot: `<form class="form" data-step="forgot"><p class="muted small">We’ll email you a link to set a new password.</p>${emailField}
         <button class="btn btn-primary btn-block">Send reset link</button>
         <div class="auth-links"><button type="button" class="link-btn" data-go="signin">Back to sign in</button></div></form>`,
-    'reset-sent': `<div class="form"><p>📬 If <b>${esc(email)}</b> has an account, a reset link is on its way.</p>
+    'reset-sent': `<div class="form"><p>If <b>${esc(email)}</b> has an account, a reset link is on its way.</p>
         <button class="btn btn-ghost btn-block" data-go="signin">Back to sign in</button></div>`,
     newpass: `<form class="form" data-step="newpass"><p>Choose a new password.</p>${pwField('New password', 'new-password')}
         <button class="btn btn-primary btn-block">Save password</button></form>`,
-    denied: `<div class="form"><p><b>${esc(email)}</b> isn’t on the guest list for this app. 💌</p>
+    denied: `<div class="form"><p><b>${esc(email)}</b> isn’t on the guest list for this app.</p>
         <button class="btn btn-ghost btn-block" data-signout>Sign out</button></div>`,
   }[step];
   app.innerHTML = `
     <main class="auth">
-      <div class="auth-logo" aria-hidden="true">🚶‍♀️💬🚶‍♂️</div>
+      <img class="auth-logo" src="icons/icon.svg" alt="" width="72" height="72">
       <h1 class="brand big">Walk <i>&amp;</i> Talk</h1>
       <p class="muted">Our dates, all in one place.</p>
       ${body}
@@ -91,7 +105,7 @@ function renderAuth(step = 'signin', email = '', error = '', note = '') {
       if (step === 'newpass') {
         await backend.setPassword(pw);
         history.replaceState(null, '', location.pathname + '#/');
-        toast('Password updated 🔒');
+        toast('Password updated');
         await enter(await backend.getUser());
       }
     } catch (err) {
@@ -121,7 +135,7 @@ async function enter(user) {
   if (DEMO && !S.ideas.length && !localStorage.getItem('wt-demo-seeded')) {
     try {
       const r = await fetch('seed/seed.json');
-      if (r.ok) { localStorage.setItem('wt-demo-seeded', '1'); await db.importSeed(await r.json()); toast('Demo loaded with your spreadsheet 💞'); }
+      if (r.ok) { localStorage.setItem('wt-demo-seeded', '1'); await db.importSeed(await r.json()); toast('Demo loaded with your spreadsheet'); }
     } catch {}
   }
   let t = null;
@@ -129,7 +143,7 @@ async function enter(user) {
   unsubscribe = backend.subscribe(() => { clearTimeout(t); t = setTimeout(() => db.load().catch(console.error), 400); });
   db.onChange(scheduleRender);
   window.addEventListener('hashchange', () => { window.scrollTo(0, 0); render(); });
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') db.load().catch(() => {}); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { applyTheme(); db.load().catch(() => {}); } });
   render();
 }
 
@@ -153,7 +167,7 @@ function render() {
   let html;
   try { html = viewHtml(r); } catch (e) {
     console.error(e);
-    html = `<div class="empty"><div class="empty-emoji">😵‍💫</div><p><b>Something went wrong on this screen.</b></p><p class="muted small">${esc(e.message)}</p><a class="btn btn-ghost" href="#/">Go home</a></div>`;
+    html = `<div class="empty"><p><b>Something went wrong on this screen.</b></p><p class="muted small">${esc(e.message)}</p><a class="btn btn-ghost" href="#/">Go home</a></div>`;
   }
   paint(r, html);
 }
@@ -168,7 +182,7 @@ function viewHtml(r) {
     case 'outing': html = V.outing({ id: r.id }); break;
     case 'settings':
       if (seedAvailable === null && LOCAL) { seedAvailable = false; fetch('seed/seed.json', { method: 'HEAD' }).then((x) => { seedAvailable = x.ok; scheduleRender(); }).catch(() => {}); }
-      html = V.settings({ demo: DEMO, theme: getTheme(), canImport: LOCAL && seedAvailable && !S.ideas.length });
+      html = V.settings({ demo: DEMO, theme: getTheme(), season: getSeason(), currentSeason: seasonNow(), canImport: LOCAL && seedAvailable && !S.ideas.length });
       break;
     default: html = V.home();
   }
@@ -189,8 +203,8 @@ function paint(r, html) {
     ${DEMO ? '<div class="demo-banner">Demo mode · saved only in this browser</div>' : ''}
     <main id="view" class="view view-${r.name}">${html}</main>
     <nav class="tabbar" aria-label="Main">
-      ${[['home', '🏠', 'Home', '#/'], ['ideas', '💡', 'Ideas', '#/ideas'], ['log', '📖', 'Log', '#/log'], ['settings', '⚙️', 'Settings', '#/settings']]
-        .map(([k, ic, label, href]) => `<a href="${href}" class="${tab === k ? 'on' : ''}" ${tab === k ? 'aria-current="page"' : ''}><span aria-hidden="true">${ic}</span>${label}</a>`).join('')}
+      ${[['home', 'home', 'Home', '#/'], ['ideas', 'idea', 'Ideas', '#/ideas'], ['log', 'book', 'Log', '#/log'], ['settings', 'settings', 'Settings', '#/settings']]
+        .map(([k, ic, label, href]) => `<a href="${href}" class="${tab === k ? 'on' : ''}" ${tab === k ? 'aria-current="page"' : ''}>${icon(ic)}${label}</a>`).join('')}
     </nav>`;
 
   for (const [k, v] of Object.entries(kept)) { const el = document.getElementById(k); if (el && el.type !== 'search') el.value = v; }
@@ -214,7 +228,7 @@ const actions = {
   'log-view': (d) => { V.logState.view = d.v; render(); },
   'bump': async () => {
     await db.bumpCount(1);
-    toast(`Date #${db.total()} counted! 🎉`, 'info', { label: 'Undo', onClick: () => db.bumpCount(-1) });
+    toast(`Date #${db.total()} counted`, 'info', { label: 'Undo', onClick: () => db.bumpCount(-1) });
   },
   'new-idea': () => F.ideaSheet(),
   'edit-idea': (d) => F.ideaSheet(d.id),
@@ -260,14 +274,15 @@ const actions = {
     const t = db.tag(d.id);
     if (await confirmSheet(`Delete the “${t.name}” tag? Ideas keep everything else.`, { yes: 'Delete', danger: true })) db.deleteTag(d.id);
   },
-  'theme': (d) => { applyTheme(d.v); render(); },
+  'theme': (d) => { setPref('wt-theme', d.v); applyTheme(); render(); },
+  'season': (d) => { setPref('wt-season', d.v); applyTheme(); render(); },
   'import': async (d, el) => {
     el.disabled = true;
     const out = document.querySelector('.import-progress');
     try {
       const seed = await (await fetch('seed/seed.json')).json();
       await db.importSeed(seed, (m) => { if (out) out.textContent = m; });
-      toast('Imported! 🎉'); location.hash = '#/';
+      toast('Imported'); location.hash = '#/';
     } catch (e) { console.error(e); toast(`Import stopped — ${e.message || e}`, 'error'); el.disabled = false; }
   },
   'reset-demo': async () => {
@@ -305,7 +320,7 @@ document.addEventListener('change', async (e) => {
   const files = [...inp.files]; const id = inp.dataset.upload; inp.value = '';
   toast(`Uploading ${files.length === 1 ? 'photo' : files.length + ' photos'}…`);
   const n = await db.addPhotos(id, files);
-  if (n) toast(`${n === 1 ? 'Photo' : n + ' photos'} added 📷`);
+  if (n) toast(`${n === 1 ? 'Photo' : n + ' photos'} added`);
 });
 
 document.addEventListener('submit', async (e) => {

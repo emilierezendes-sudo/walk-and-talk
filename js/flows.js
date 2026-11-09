@@ -2,6 +2,7 @@
 import * as db from './db.js';
 import { S } from './db.js';
 import { esc, openSheet, confirmSheet, toast, REACTIONS, STATUS, fmtDate, fmtDay, plural } from './ui.js';
+import { icon } from './icons.js';
 
 const go = (hash) => { location.hash = hash; };
 
@@ -9,14 +10,14 @@ const go = (hash) => { location.hash = hash; };
 function placeField(value) {
   return `<div class="field place-field"><label for="place-input">Where? <small class="muted">(optional)</small></label>
     <div class="place-row"><input id="place-input" name="location" value="${esc(value || '')}" placeholder="Place or address" maxlength="200" autocomplete="off">
-    <button type="button" class="btn btn-ghost btn-sm" data-place-find>📍 Find</button></div>
+    <button type="button" class="btn btn-ghost btn-sm" data-place-find>${icon('search', 'ic-sm')} Find</button></div>
     <p class="place-status small" aria-live="polite"></p><div class="place-results" role="list"></div></div>`;
 }
 // Wires up the field. Returns a function that reads { location, lat, lng, needsLookup }.
 function mountPlace(root, start = {}) {
   const inp = root.querySelector('[name=location]'), status = root.querySelector('.place-status'), list = root.querySelector('.place-results');
   const st = { lat: start.lat ?? null, lng: start.lng ?? null, text: (start.location || '').trim() };
-  const showPinned = () => { status.textContent = st.lat != null && inp.value.trim() ? '📍 Pinned on your map' : ''; };
+  const showPinned = () => { status.textContent = st.lat != null && inp.value.trim() ? 'Pinned on your map' : ''; };
   showPinned();
   inp.addEventListener('input', () => { if (inp.value.trim() !== st.text) { st.lat = st.lng = null; } list.innerHTML = ''; showPinned(); });
   const find = async () => {
@@ -63,7 +64,7 @@ export function statusMenu(ideaId) {
       <button class="status-choice st-${k} ${i.status === k ? 'current' : ''}" data-status="${k}">
         <span class="pill-dot" aria-hidden="true"></span><span><b>${s.label}</b><small>${
           k === 'not_yet' ? 'Still on the wish list' : k === 'planned' ? 'We’ve picked a day (or soon will)' : 'We went! Log it with photos & a recap'}</small></span>
-        ${i.status === k ? '<span class="tick" aria-label="current">✓</span>' : ''}</button>`).join('')}</div>`,
+        ${i.status === k ? `<span class="tick" aria-label="current">${icon('check')}</span>` : ''}</button>`).join('')}</div>`,
     onMount(el, close) {
       el.querySelectorAll('[data-status]').forEach((b) => b.onclick = () => { close(); changeStatus(ideaId, b.dataset.status); });
     },
@@ -84,7 +85,7 @@ export async function changeStatus(ideaId, status) {
 export function planSheet(ideaId) {
   const i = db.idea(ideaId);
   openSheet({
-    title: 'Plan it 📅',
+    title: 'Plan it',
     html: `<p class="muted">${esc(i.title)}</p>
       <label class="field"><span>When? <small class="muted">(optional)</small></span>
         <input type="date" name="when" value="${esc(i.planned_for || '')}"></label>
@@ -92,7 +93,7 @@ export function planSheet(ideaId) {
     onMount(el, close) {
       el.querySelector('[data-save]').onclick = async () => {
         await db.setStatus(ideaId, 'planned', el.querySelector('[name=when]').value);
-        close(); toast('Planned! 🗓️');
+        close(); toast('Planned');
       };
     },
   });
@@ -106,7 +107,7 @@ export function logSheet({ ideaId = null, outingId = null } = {}) {
   const options = [...S.ideas].sort((a, b) => a.title.localeCompare(b.title))
     .map((x) => `<option value="${x.id}" ${x.id === linkedId ? 'selected' : ''}>${esc(x.title)}</option>`).join('');
   openSheet({
-    title: o ? 'Edit date' : i ? 'We did it! 🎉' : 'Log a date',
+    title: o ? 'Edit date' : i ? 'We did it!' : 'Log a date',
     html: `
       <form class="form" novalidate>
         ${!o && i ? `<p class="muted">${esc(i.title)}</p>` : `
@@ -120,7 +121,7 @@ export function logSheet({ ideaId = null, outingId = null } = {}) {
           <textarea name="recap" rows="4" placeholder="The best part was…">${esc(o?.recap || '')}</textarea></label>
         ${!o && Number(db.baseline().count) > 0 ? `
         <label class="switch-row counted-row"><input type="checkbox" name="counted">
-          <span>Already counted with <b>＋1 date</b><small>Adds the details without changing your total</small></span></label>` : ''}
+          <span>Already counted with <b>+ 1 date</b><small>Adds the details without changing your total</small></span></label>` : ''}
         <button class="btn btn-primary btn-block" type="submit">${o ? 'Save' : 'Log it'}</button>
         ${!o && i && i.status !== 'done' ? '<button class="btn btn-ghost btn-block" type="button" data-just-done>Just mark Done (don’t add to the log)</button>' : ''}
         ${!o ? '<p class="muted small center">You can add photos on the next screen.</p>' : ''}
@@ -147,7 +148,7 @@ export function logSheet({ ideaId = null, outingId = null } = {}) {
         if (alreadyCounted) await db.bumpCount(-1);
         if (place.needsLookup) lookupLater('outing', id, place.location);
         if (idea_id && db.idea(idea_id)?.status !== 'done') await db.setStatus(idea_id, 'done');
-        if (!o) { toast(alreadyCounted ? `Details added — total stays at ${db.total()} 💞` : `Date #${db.total()} logged! 🎉`); go(`#/outing/${id}`); }
+        if (!o) { toast(alreadyCounted ? `Details added — total stays at ${db.total()}` : `Date #${db.total()} logged`); go(`#/outing/${id}`); }
       };
     },
   });
@@ -159,14 +160,14 @@ export function ideaSheet(ideaId = null) {
   const sel = new Set(i?.tag_ids || []);
   const people = S.members.map((m) => `<option value="${m.id}" ${(i ? i.suggested_by : S.me?.id) === m.id ? 'selected' : ''}>${esc(m.display_name)}</option>`).join('');
   openSheet({
-    title: i ? 'Edit idea' : 'New date idea 💡',
+    title: i ? 'Edit idea' : 'New date idea',
     html: `
       <form class="form" novalidate>
         <label class="field"><span>The idea</span><input name="title" required maxlength="140" value="${esc(i?.title || '')}" placeholder="e.g. Sunset picnic at the lake" autofocus></label>
         <label class="field"><span>Details <small class="muted">(optional)</small></span>
           <textarea name="description" rows="3" placeholder="Anything to remember…">${esc(i?.description || '')}</textarea></label>
         <fieldset class="field"><legend>Tags</legend>
-          <div class="tag-pick">${S.tags.map((t) => `<button type="button" class="chip chip-toggle ${sel.has(t.id) ? 'on' : ''}" data-tag="${t.id}" aria-pressed="${sel.has(t.id)}">${t.emoji} ${esc(t.name)}</button>`).join('')}</div>
+          <div class="tag-pick">${S.tags.map((t) => `<button type="button" class="chip chip-toggle ${sel.has(t.id) ? 'on' : ''}" data-tag="${t.id}" aria-pressed="${sel.has(t.id)}">${esc(t.name)}</button>`).join('')}</div>
         </fieldset>
         <label class="switch-row"><input type="checkbox" name="want" ${i?.want ? 'checked' : ''}><span>😍 We <b>really</b> want to do this</span></label>
         <label class="field"><span>Link <small class="muted">(website, tickets…)</small></span><input name="link" type="url" inputmode="url" value="${esc(i?.link || '')}" placeholder="https://"></label>
@@ -193,7 +194,7 @@ export function ideaSheet(ideaId = null) {
         close();
         const id = await db.saveIdea(fields, ideaId);
         if (place.needsLookup) lookupLater('idea', id, place.location);
-        if (!i) { toast('Idea added 💡'); go(`#/idea/${id}`); }
+        if (!i) { toast('Idea added'); go(`#/idea/${id}`); }
       };
     },
   });
@@ -203,14 +204,14 @@ export function ideaSheet(ideaId = null) {
 const pickPrefs = { tags: new Set(), wantOnly: false, planned: false };
 export function pickSheet() {
   openSheet({
-    title: '🎲 Pick for us',
+    title: 'Pick for us',
     className: 'pick-sheet',
     html: `
-      <div class="pick-stage" aria-live="polite"><div class="pick-card idle"><span class="pick-emoji">🎲</span><span class="pick-title">Ready when you are</span></div></div>
+      <div class="pick-stage" aria-live="polite"><div class="pick-card idle">${icon('dice', 'pick-icon')}<span class="pick-title">Ready when you are</span></div></div>
       <div class="pick-actions"></div>
       <details class="pick-filters" open>
         <summary>Filters <span class="pick-count muted small"></span></summary>
-        <div class="tag-pick">${S.tags.map((t) => `<button type="button" class="chip chip-toggle ${pickPrefs.tags.has(t.id) ? 'on' : ''}" data-tag="${t.id}" aria-pressed="${pickPrefs.tags.has(t.id)}">${t.emoji} ${esc(t.name)}</button>`).join('')}</div>
+        <div class="tag-pick">${S.tags.map((t) => `<button type="button" class="chip chip-toggle ${pickPrefs.tags.has(t.id) ? 'on' : ''}" data-tag="${t.id}" aria-pressed="${pickPrefs.tags.has(t.id)}">${esc(t.name)}</button>`).join('')}</div>
         <label class="switch-row"><input type="checkbox" name="want" ${pickPrefs.wantOnly ? 'checked' : ''}><span>Only 😍 ideas</span></label>
         <label class="switch-row"><input type="checkbox" name="planned" ${pickPrefs.planned ? 'checked' : ''}><span>Include ideas already Planned</span></label>
       </details>
@@ -233,11 +234,11 @@ export function pickSheet() {
       let last = null;
       const card = (i, cls = '') => {
         const t = i.tag_ids?.length ? db.tag(i.tag_ids[0]) : null;
-        return `<div class="pick-card ${cls}"><span class="pick-emoji">${t?.emoji || '💞'}</span><span class="pick-title">${esc(i.title)}</span>${i.want ? '<span class="pick-want">😍</span>' : ''}</div>`;
+        return `<div class="pick-card ${cls}">${t ? `<span class="pick-tag">${esc(t.name)}</span>` : ''}<span class="pick-title">${esc(i.title)}</span>${i.want ? '<span class="pick-want" title="We really want to do this">😍</span>' : ''}</div>`;
       };
       roll.onclick = async () => {
         const p = pool();
-        if (!p.length) { stage.innerHTML = '<div class="pick-card idle"><span class="pick-emoji">🤷</span><span class="pick-title">Nothing matches — try fewer filters</span></div>'; actions.innerHTML = ''; return; }
+        if (!p.length) { stage.innerHTML = `<div class="pick-card idle">${icon('search', 'pick-icon')}<span class="pick-title">Nothing matches — try fewer filters</span></div>`; actions.innerHTML = ''; return; }
         const choices = p.length > 1 ? p.filter((x) => x !== last) : p;
         const winner = choices[Math.floor(Math.random() * choices.length)];
         roll.disabled = true; actions.innerHTML = '';
@@ -251,7 +252,7 @@ export function pickSheet() {
         }
         last = winner;
         stage.innerHTML = card(winner, 'win');
-        actions.innerHTML = `<button class="btn btn-accent" data-plan>📅 Let’s do it</button><a class="btn btn-ghost" href="#/idea/${winner.id}" data-close>See idea</a>`;
+        actions.innerHTML = `<button class="btn btn-accent" data-plan>${icon('calendar', 'ic-sm')} Let’s do it</button><a class="btn btn-ghost" href="#/idea/${winner.id}" data-close>See idea</a>`;
         actions.querySelector('[data-plan]').onclick = () => { close(); planSheet(winner.id); };
         roll.textContent = 'Pick again'; roll.disabled = false;
       };
@@ -265,17 +266,14 @@ export function tagSheet(tagId = null) {
   openSheet({
     title: t ? 'Edit tag' : 'New tag',
     html: `<form class="form" novalidate>
-      <div class="row-fields">
-        <label class="field emoji-field"><span>Emoji</span><input name="emoji" value="${esc(t?.emoji || '🏷️')}" maxlength="8" aria-label="Tag emoji"></label>
-        <label class="field grow"><span>Name</span><input name="name" value="${esc(t?.name || '')}" maxlength="40" required autofocus placeholder="e.g. Rainy day"></label>
-      </div>
+      <label class="field"><span>Name</span><input name="name" value="${esc(t?.name || '')}" maxlength="40" required autofocus placeholder="Rainy day"></label>
       <button class="btn btn-primary btn-block" type="submit">${t ? 'Save' : 'Add tag'}</button></form>`,
     onMount(el, close) {
       const f = el.querySelector('form');
       f.onsubmit = async (e) => {
         e.preventDefault();
         const name = f.elements.name.value.trim(); if (!name) { toast('Give the tag a name'); return; }
-        close(); await db.saveTag({ name, emoji: f.elements.emoji.value.trim() || '🏷️' }, tagId);
+        close(); await db.saveTag({ name }, tagId);
       };
     },
   });
@@ -305,11 +303,11 @@ export function photoViewer(photoId) {
     back.innerHTML = `
       <img src="${esc(db.photoUrl(p.path))}" alt="Photo ${idx + 1} of ${list.length}">
       <div class="viewer-bar">
-        <button class="icon-btn" data-x aria-label="Close">✕</button>
+        <button class="icon-btn" data-x aria-label="Close">${icon('x')}</button>
         <span>${idx + 1} / ${list.length} · added by ${esc(db.memberName(p.created_by))}</span>
-        <button class="icon-btn" data-del aria-label="Delete photo">🗑</button>
+        <button class="icon-btn" data-del aria-label="Delete photo">${icon('trash')}</button>
       </div>
-      ${list.length > 1 ? '<button class="viewer-nav prev" data-prev aria-label="Previous photo">‹</button><button class="viewer-nav next" data-next aria-label="Next photo">›</button>' : ''}`;
+      ${list.length > 1 ? `<button class="viewer-nav prev" data-prev aria-label="Previous photo">${icon('back')}</button><button class="viewer-nav next" data-next aria-label="Next photo">${icon('next')}</button>` : ''}`;
   };
   const close = () => { back.remove(); document.removeEventListener('keydown', key); document.body.classList.remove('no-scroll'); };
   const step = (d) => { idx = (idx + d + list.length) % list.length; draw(); };

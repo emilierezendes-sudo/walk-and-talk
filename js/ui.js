@@ -1,4 +1,5 @@
 // Small UI helpers: escaping, dates, toasts, bottom sheets.
+import { icon } from './icons.js';
 export const REACTIONS = ['❤️', '😂', '😍', '🔥', '🥹', '👏', '😮', '🎉'];
 export const QUICK_EMOJI = ['❤️', '😂', '😍', '🥰', '🔥', '🥹', '😮', '🎉', '✨', '🍕', '🌅', '🚶'];
 export const STATUS = {
@@ -52,20 +53,20 @@ export function toast(msg, kind = 'info', action = null) {
   setTimeout(hide, kind === 'error' ? 6000 : action ? 5000 : 2600);
 }
 
-// ───────── milestone party 🎉 ─────────
+// ───────── milestone party ─────────
 export function celebrate(n) {
   const wrap = document.createElement('div');
   wrap.className = 'party'; wrap.setAttribute('role', 'alertdialog'); wrap.setAttribute('aria-label', `Milestone: date number ${n}`);
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const bits = ['💞', '🎉', '✨', '💜', '🧡', '🥳', '⭐'];
-  const confetti = reduce ? '' : Array.from({ length: 46 }, (_, k) =>
-    `<span class="confetti" style="left:${Math.random() * 100}%;animation-delay:${(Math.random() * 1.2).toFixed(2)}s;animation-duration:${(2.4 + Math.random() * 1.8).toFixed(2)}s;font-size:${18 + Math.round(Math.random() * 16)}px">${bits[k % bits.length]}</span>`).join('');
+  // paper confetti in the current season's colors
+  const confetti = reduce ? '' : Array.from({ length: 60 }, (_, k) =>
+    `<span class="confetti c${k % 4}" style="left:${(Math.random() * 100).toFixed(1)}%;animation-delay:${(Math.random() * 1.2).toFixed(2)}s;animation-duration:${(2.4 + Math.random() * 1.8).toFixed(2)}s;width:${6 + Math.round(Math.random() * 6)}px;height:${10 + Math.round(Math.random() * 8)}px"></span>`).join('');
   wrap.innerHTML = `${confetti}
     <div class="party-card">
-      <div class="party-emoji" aria-hidden="true">🥳</div>
-      <div class="party-num">Date #${n}!</div>
-      <p>${n === 365 ? 'A whole year’s worth of dates. Wow.' : n >= 100 ? 'That’s a LOT of adventures together.' : 'Look at you two go!'}</p>
-      <button class="btn btn-primary btn-block">Yay! 💞</button>
+      <div class="party-kicker">Milestone</div>
+      <div class="party-num">Date #${n}</div>
+      <p>${n === 365 ? 'A whole year’s worth of dates. Wow.' : n >= 100 ? 'That’s a lot of adventures together.' : 'Look at you two go!'}</p>
+      <button class="btn btn-primary btn-block">Yay!</button>
     </div>`;
   const close = () => { wrap.classList.add('out'); setTimeout(() => wrap.remove(), 250); };
   wrap.addEventListener('click', close);
@@ -81,7 +82,7 @@ export function openSheet({ title = '', html = '', onMount, className = '' }) {
   back.innerHTML = `
     <div class="sheet ${className}" role="dialog" aria-modal="true" aria-label="${esc(title)}">
       <div class="sheet-grip" aria-hidden="true"></div>
-      ${title ? `<div class="sheet-head"><h2>${esc(title)}</h2><button class="icon-btn" data-close aria-label="Close">✕</button></div>` : ''}
+      ${title ? `<div class="sheet-head"><h2>${esc(title)}</h2><button class="icon-btn" data-close aria-label="Close">${icon('x')}</button></div>` : ''}
       <div class="sheet-body">${html}</div>
     </div>`;
   const prevFocus = document.activeElement;

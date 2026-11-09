@@ -1,11 +1,11 @@
-# Draws the app icons (plum square, blush speech bubble, orange "&").
+﻿# Draws the app icons (charcoal-green square, cream speech bubble, tan "&").
 # Usage: powershell -ExecutionPolicy Bypass -File tools\make-icons.ps1
 Add-Type -AssemblyName System.Drawing
 $out = Join-Path (Split-Path -Parent $PSScriptRoot) 'icons'
 New-Item -ItemType Directory -Force $out | Out-Null
-$plum = [Drawing.ColorTranslator]::FromHtml('#8F2D56')
-$blush = [Drawing.ColorTranslator]::FromHtml('#E5D4CE')
-$orange = [Drawing.ColorTranslator]::FromHtml('#BD632F')
+$plum = [Drawing.ColorTranslator]::FromHtml('#3E4A43')
+$blush = [Drawing.ColorTranslator]::FromHtml('#F3EEE6')
+$orange = [Drawing.ColorTranslator]::FromHtml('#B07A4F')
 
 function Draw([int]$size, [string]$file, [double]$pad = 0.0, [bool]$rounded = $false) {
   $bmp = New-Object Drawing.Bitmap $size, $size

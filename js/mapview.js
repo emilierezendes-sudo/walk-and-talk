@@ -8,11 +8,11 @@ import { logState } from './views.js';
 
 let map = null, layer = null, el = null, fitted = false;
 
-const pinIcon = (L, emoji, kind) => L.divIcon({
-  className: `pin pin-${kind}`, html: `<span><i>${emoji}</i></span>`,
-  iconSize: [38, 38], iconAnchor: [19, 38], popupAnchor: [0, -34],
+// Plain map pins: filled = a date we went on, outlined = an idea we want to try
+const pinIcon = (L, kind) => L.divIcon({
+  className: `pin pin-${kind}`, html: '<span></span>',
+  iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -26],
 });
-const tagEmoji = (ideaObj) => (ideaObj?.tag_ids?.length && db.tag(ideaObj.tag_ids[0])?.emoji) || null;
 
 export async function mountMap() {
   const slot = document.getElementById('map-slot');
@@ -36,14 +36,14 @@ export async function mountMap() {
   const pts = []; let focus = null;
   for (const o of S.outings) {
     if (o.lat == null) continue;
-    const m = L.marker([o.lat, o.lng], { icon: pinIcon(L, tagEmoji(o.idea_id && db.idea(o.idea_id)) || '💞', 'done'), title: db.outingTitle(o), riseOnHover: true })
+    const m = L.marker([o.lat, o.lng], { icon: pinIcon(L, 'done'), title: db.outingTitle(o), riseOnHover: true })
       .bindPopup(`<b>${esc(db.outingTitle(o))}</b><br><span>${fmtDate(o.happened_on)}</span><br><a href="#/outing/${o.id}">Open this date ›</a>`);
     layer.addLayer(m); pts.push([o.lat, o.lng]);
     if (logState.focus === o.id) focus = m;
   }
   for (const i of S.ideas) {
     if (i.lat == null || i.status === 'done') continue;
-    const m = L.marker([i.lat, i.lng], { icon: pinIcon(L, i.want ? '😍' : tagEmoji(i) || '💡', 'wish'), title: i.title, riseOnHover: true })
+    const m = L.marker([i.lat, i.lng], { icon: pinIcon(L, 'wish'), title: i.title, riseOnHover: true })
       .bindPopup(`<b>${esc(i.title)}</b><br><span>Idea · ${STATUS[i.status].label}</span><br><a href="#/idea/${i.id}">Open idea ›</a>`);
     layer.addLayer(m); pts.push([i.lat, i.lng]);
   }

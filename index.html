@@ -5,8 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Walk &amp; Talk</title>
   <meta name="description" content="Our date ideas, plans and memories.">
-  <meta name="theme-color" content="#E5D4CE" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#011627" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#EFE7DC">
+  <script>
+    // Pick the season + light/dark before the page draws, so it never flashes the wrong colors
+    (function () {
+      var r = document.documentElement, get = function (k, d) { try { return localStorage.getItem(k) || d; } catch (e) { return d; } };
+      var mode = get('wt-theme', 'auto'), season = get('wt-season', 'auto');
+      var months = ['winter','winter','spring','spring','spring','summer','summer','summer','fall','fall','fall','winter'];
+      r.dataset.theme = mode;
+      r.dataset.mode = mode === 'dark' || (mode === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+      r.dataset.season = season === 'auto' ? months[new Date().getMonth()] : season;
+    })();
+  </script>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -20,7 +30,7 @@
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-  <div id="app"><main class="auth"><div class="auth-logo" aria-hidden="true">🚶‍♀️💬🚶‍♂️</div></main></div>
+  <div id="app"><main class="auth"><img class="auth-logo" src="icons/icon.svg" alt="" width="72" height="72"></main></div>
   <noscript>Walk &amp; Talk needs JavaScript turned on.</noscript>
   <script type="module" src="js/app.js"></script>
 </body>
