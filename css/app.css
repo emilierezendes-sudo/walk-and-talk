@@ -296,7 +296,9 @@ p { margin: .5rem 0; }
 .field textarea { resize: vertical; }
 .field input:focus, .field select:focus, .field textarea:focus, .search:focus, .composer textarea:focus { outline: none; border-color: var(--primary); }
 .switch-row { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
-.switch-row input { width: 22px; height: 22px; accent-color: var(--primary); }
+.switch-row input { width: 22px; height: 22px; accent-color: var(--primary); flex: none; }
+.switch-row small { display: block; color: var(--muted); font-size: .8rem; }
+.counted-row { background: var(--surface); border-radius: 14px; padding: 8px 12px; }
 .tag-pick { display: flex; flex-wrap: wrap; gap: 6px; }
 .row-fields { display: flex; gap: 10px; }
 .emoji-field { width: 76px; }

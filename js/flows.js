@@ -118,6 +118,9 @@ export function logSheet({ ideaId = null, outingId = null } = {}) {
         ${placeField(o ? o.location : i?.location)}
         <label class="field"><span>Recap <small class="muted">(how did it go?)</small></span>
           <textarea name="recap" rows="4" placeholder="The best part was…">${esc(o?.recap || '')}</textarea></label>
+        ${!o && Number(db.baseline().count) > 0 ? `
+        <label class="switch-row counted-row"><input type="checkbox" name="counted">
+          <span>Already counted with <b>＋1 date</b><small>Adds the details without changing your total</small></span></label>` : ''}
         <button class="btn btn-primary btn-block" type="submit">${o ? 'Save' : 'Log it'}</button>
         ${!o && i && i.status !== 'done' ? '<button class="btn btn-ghost btn-block" type="button" data-just-done>Just mark Done (don’t add to the log)</button>' : ''}
         ${!o ? '<p class="muted small center">You can add photos on the next screen.</p>' : ''}
@@ -137,11 +140,14 @@ export function logSheet({ ideaId = null, outingId = null } = {}) {
         const place = readPlace();
         const fields = { idea_id, title: idea_id ? '' : title, happened_on: f.elements.day.value || db.todayStr(),
           location: place.location, lat: place.lat, lng: place.lng, recap: f.elements.recap.value.trim() };
+        const alreadyCounted = !!f.elements.counted?.checked;
         close();
         const id = await db.saveOuting(fields, outingId);
+        // It was already in the total as a "＋1", so move it from that count into the log
+        if (alreadyCounted) await db.bumpCount(-1);
         if (place.needsLookup) lookupLater('outing', id, place.location);
         if (idea_id && db.idea(idea_id)?.status !== 'done') await db.setStatus(idea_id, 'done');
-        if (!o) { toast(`Date #${db.total()} logged! 🎉`); go(`#/outing/${id}`); }
+        if (!o) { toast(alreadyCounted ? `Details added — total stays at ${db.total()} 💞` : `Date #${db.total()} logged! 🎉`); go(`#/outing/${id}`); }
       };
     },
   });
