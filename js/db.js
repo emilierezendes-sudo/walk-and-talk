@@ -9,7 +9,7 @@ export const S = {
   v3: false, // true once supabase/phase3.sql has been run (surprises, links, suggestions)
 };
 const TABLES = ['members', 'tags', 'ideas', 'outings', 'photos', 'comments', 'reactions', 'settings'];
-const OPTIONAL = ['ratings', 'links', 'suggestions'];
+const OPTIONAL = ['ratings', 'links', 'suggestions', 'push_subscriptions'];
 
 let B = null;
 const listeners = new Set();
@@ -26,6 +26,7 @@ export async function load() {
   const r = Object.fromEntries(TABLES.map((t, i) => [t, rows[i]]));
   S.v2 = opt[0] !== null;
   S.v3 = opt[1] !== null && opt[2] !== null;
+  S.pushReady = opt[3] !== null && B.mode !== 'demo'; // notifications.sql has been run
   Object.assign(S, r, {
     ratings: opt[0] || [],
     links: opt[1] || [],

@@ -6,3 +6,5 @@ supabase/allowlist.sql
 .claude/
 Thumbs.db
 .DS_Store
+supabase/notify-secrets.txt
+supabase/notify-setup.sql

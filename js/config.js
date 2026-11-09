@@ -5,4 +5,6 @@ export const CONFIG = {
   appName: 'Walk & Talk',
   supabaseUrl: 'https://eflyceeyrowlfdvbvkgk.supabase.co',
   supabaseAnonKey: 'sb_publishable_O_fElFkCTUfTi5C1yfgP4A_cwfxbNvd',
+  // Public half of the notification keys (tools/make-push-keys.ps1). Safe to publish.
+  vapidPublicKey: 'BJ0h_fxhb2oOtwD7qMwqck3evycFNXKYrEAE-fhZbwKH6K2bvEvzYDhWKO6owP7gcoSZ6YL7TujlZA9WMRbVFxY',
 };

@@ -48,6 +48,7 @@ export function createSupabaseBackend({ url, key }) {
     async upsertBy(table, row, onConflict) { return ok(await sb.from(table).upsert(row, { onConflict }).select())[0]; },
     async rpc(fn, args) { return ok(await sb.rpc(fn, args)); },
     async remove(table, id) { ok(await sb.from(table).delete().eq('id', id)); },
+    async removeWhere(table, column, value) { ok(await sb.from(table).delete().eq(column, value)); },
     async removeMany(table, ids) { if (ids.length) ok(await sb.from(table).delete().in('id', ids)); },
 
     async upload(path, blob, contentType) {

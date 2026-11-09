@@ -306,7 +306,23 @@ function sharingCard(demo) {
 }
 
 // ───────── Settings ─────────
-export function settings({ demo, canImport, theme, season, currentSeason }) {
+function notificationsCard(state) {
+  const body = {
+    'needs-install': '<p class="small">On iPhone, notifications only work from the home-screen app. In <b>Safari</b>, tap <b>Share → Add to Home Screen</b>, then open Walk &amp; Talk from the new icon and come back here.</p>',
+    unsupported: '<p class="muted small">This browser can’t show notifications. Try the home-screen app, or Chrome on Android.</p>',
+    blocked: '<p class="small">Notifications are blocked for this app. Turn them on in your phone’s Settings (Notifications → Walk &amp; Talk), then reopen the app.</p>',
+    off: '<button class="btn btn-primary btn-block" data-act="push-on">Turn on notifications</button>',
+    on: '<p class="small"><b>On for this phone.</b></p><button class="btn btn-ghost btn-block" data-act="push-off">Turn off on this phone</button>',
+    checking: '<p class="muted small">Checking…</p>',
+  }[state || 'checking'];
+  return `<section class="card">
+    <h2>Notifications</h2>
+    <p class="muted small">Get a ping when your partner comments, adds an idea, plans a surprise or logs a date — and when a friend suggests one.</p>
+    ${body}
+  </section>`;
+}
+
+export function settings({ demo, canImport, theme, season, currentSeason, pushState }) {
   const me = db.member(S.me?.id);
   const base = db.baseline();
   const themeBtn = (k, label) => `<button class="seg-btn ${theme === k ? 'on' : ''}" data-act="theme" data-v="${k}" aria-pressed="${theme === k}">${label}</button>`;
@@ -320,6 +336,7 @@ export function settings({ demo, canImport, theme, season, currentSeason }) {
     ${S.v2 && !S.v3 && !demo ? `<section class="card notice"><h2>One-time update needed</h2>
       <p class="small">Surprises, the share link and the suggest-a-date link need a small database update. In Supabase, open <b>SQL Editor → New query</b>, paste everything from <code>supabase/phase3.sql</code>, and click <b>Run</b>. Then reopen the app.</p></section>` : ''}
     ${S.v3 ? sharingCard(demo) : ''}
+    ${S.pushReady ? notificationsCard(pushState) : ''}
     <section class="card">
       <h2>Us</h2>
       <ul class="people">${S.members.map((m) => `<li>${avatar(m.id)}<span><b>${esc(m.display_name)}</b>${db.isMe(m.id) ? ' <small class="muted">(you)</small>' : ''}</span></li>`).join('')}</ul>

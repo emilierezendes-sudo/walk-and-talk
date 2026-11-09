@@ -143,12 +143,17 @@ async function enter(user) {
   unsubscribe = backend.subscribe(() => { clearTimeout(t); t = setTimeout(() => db.load().catch(console.error), 400); });
   db.onChange(scheduleRender);
   window.addEventListener('hashchange', () => { window.scrollTo(0, 0); render(); });
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { applyTheme(); db.load().catch(() => {}); } });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { applyTheme(); pushStatus = null; db.load().catch(() => {}); } });
   render();
 }
 
 // ───────── routing & rendering ─────────
 let seedAvailable = null;
+let pushStatus = null;
+async function refreshPush() {
+  try { pushStatus = await (await import('./push.js')).pushState(); } catch { pushStatus = 'unsupported'; }
+  scheduleRender();
+}
 function route() {
   const [path, query] = (location.hash.slice(1) || '/').split('?');
   const parts = path.split('/').filter(Boolean);
@@ -182,7 +187,8 @@ function viewHtml(r) {
     case 'outing': html = V.outing({ id: r.id }); break;
     case 'settings':
       if (seedAvailable === null && LOCAL) { seedAvailable = false; fetch('seed/seed.json', { method: 'HEAD' }).then((x) => { seedAvailable = x.ok; scheduleRender(); }).catch(() => {}); }
-      html = V.settings({ demo: DEMO, theme: getTheme(), season: getSeason(), currentSeason: seasonNow(), canImport: LOCAL && seedAvailable && !S.ideas.length });
+      if (S.pushReady && pushStatus === null) { pushStatus = 'checking'; refreshPush(); }
+      html = V.settings({ demo: DEMO, theme: getTheme(), season: getSeason(), currentSeason: seasonNow(), pushState: pushStatus, canImport: LOCAL && seedAvailable && !S.ideas.length });
       break;
     default: html = V.home();
   }
@@ -226,6 +232,13 @@ const actions = {
   'pick': () => F.pickSheet(),
   'rate': (d) => db.setRating(d.id, Number(d.v)),
   'peek': (d) => F.peekFlow(d.id),
+  'push-on': async (d, el) => {
+    el.disabled = true; el.textContent = 'Turning on…';
+    try { await (await import('./push.js')).enablePush(); toast('Notifications are on for this phone'); }
+    catch (e) { toast(e.message || 'Couldn’t turn on notifications', 'error'); }
+    await refreshPush();
+  },
+  'push-off': async () => { await (await import('./push.js')).disablePush(); toast('Notifications off for this phone'); await refreshPush(); },
   'suggestions': () => F.suggestionsSheet(),
   'calendar': (d) => F.calendarSheet(d.id),
   'share-date': (d) => F.shareDate(d.id),
