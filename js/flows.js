@@ -104,7 +104,8 @@ export function logSheet({ ideaId = null, outingId = null } = {}) {
   const o = outingId ? db.outing(outingId) : null;
   const linkedId = o ? o.idea_id : ideaId;
   const i = linkedId ? db.idea(linkedId) : null;
-  const options = db.visibleIdeas().sort((a, b) => a.title.localeCompare(b.title))
+  // done ideas drop out of the list, except the one this date is already linked to
+  const options = db.visibleIdeas().filter((x) => x.status !== 'done' || x.id === linkedId).sort((a, b) => a.title.localeCompare(b.title))
     .map((x) => `<option value="${x.id}" ${x.id === linkedId ? 'selected' : ''}>${esc(x.title)}</option>`).join('');
   openSheet({
     title: o ? 'Edit date' : i ? 'We did it!' : 'Log a date',
